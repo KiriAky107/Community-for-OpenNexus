@@ -87,3 +87,24 @@ def test_cross_namespace_and_missing_auth(env):
     assert client.post("/catalog/v1/publish/submissions", json=payload).status_code == 401
     payload["release"]["namespace"] = "other"
     assert client.post("/catalog/v1/publish/submissions", headers=author, json=payload).status_code == 403
+
+
+@pytest.mark.parametrize("kind,identifier", [("plugin", "markdown-workbench"), ("skill", "note-reviewer")])
+def test_repository_manifest_identity_aliases_and_conflicts(kind, identifier):
+    from pathlib import Path
+    import yaml
+    from community.package import inspect
+    source = Path(__file__).resolve().parents[2] / "backend" / "extensions" / "community" / (kind + "s") / identifier / (kind + ".yaml")
+    body = source.read_text(encoding="utf-8")
+    manifest = yaml.safe_load(body)
+    private = Ed25519PrivateKey.generate()
+    payload = package(private, kind, files={kind + ".yaml": body})
+    release = Release(**payload["release"])
+    release.package_id = identifier
+    release.permissions = manifest["permissions"]
+    inspect(release, base64.b64decode(payload["archive_base64"]))
+    bad = package(private, kind, files={kind + ".yaml": body + "\n" + kind + "_id: other-id\n"})
+    release.sha256 = bad["release"]["sha256"]
+    release.size = bad["release"]["size"]
+    with pytest.raises(ValueError):
+        inspect(release, base64.b64decode(bad["archive_base64"]))

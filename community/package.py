@@ -89,7 +89,9 @@ def inspect(release: Release, blob: bytes):
         import yaml
         value = yaml.safe_load(files[matches[0]])
         identity = {"theme": "theme_id", "skill": "skill_id", "plugin": "plugin_id"}[release.type]
-        if not isinstance(value, dict) or value.get(identity) != release.package_id or value.get("version") != release.version:
+        if (not isinstance(value, dict) or value.get(identity, value.get("id") if release.type in {"plugin", "skill"} else None) != release.package_id
+                or (identity in value and "id" in value and value[identity] != value["id"])
+                or value.get("version") != release.version):
             raise ValueError("发行身份与类型清单不一致")
         if set(value.get("permissions", [])) != set(release.permissions):
             raise ValueError("发行权限与类型清单不一致")
