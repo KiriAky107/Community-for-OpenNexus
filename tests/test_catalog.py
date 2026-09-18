@@ -91,11 +91,11 @@ def test_cross_namespace_and_missing_auth(env):
 
 @pytest.mark.parametrize("kind,identifier", [("plugin", "markdown-workbench"), ("skill", "note-reviewer")])
 def test_repository_manifest_identity_aliases_and_conflicts(kind, identifier):
-    from pathlib import Path
     import yaml
     from community.package import inspect
-    source = Path(__file__).resolve().parents[2] / "backend" / "extensions" / "community" / (kind + "s") / identifier / (kind + ".yaml")
-    body = source.read_text(encoding="utf-8")
+    # Keep this repository test self-contained. The production packages live in
+    # the desktop repository and are intentionally not copied into this service.
+    body = f"id: {identifier}\nversion: 1.0.0\npermissions: []\n"
     manifest = yaml.safe_load(body)
     private = Ed25519PrivateKey.generate()
     payload = package(private, kind, files={kind + ".yaml": body})
