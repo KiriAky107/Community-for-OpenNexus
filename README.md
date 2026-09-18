@@ -1,6 +1,6 @@
 # NotesAgent Community 原型
 
-这是独立的目录/提交/审核服务，不存储用户 Vault，不复用 Sync Token。实现与限制见 [Community v1 契约](../docs/contracts/Community-v1契约.md)。
+这是独立的目录/提交/审核服务，不存储用户 Vault，不复用 Sync Token。当前实现是 Community v1 的 Alpha 原型。
 
 ```powershell
 cd community-server
