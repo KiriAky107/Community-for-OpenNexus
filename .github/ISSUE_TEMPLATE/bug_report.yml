@@ -1,0 +1,48 @@
+name: Catalog bug / 目录缺陷
+description: Report a reproducible catalog, validation, or moderation defect
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Do not attach bearer tokens, private keys, private packages, personal data, or unpatched vulnerability details.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options: [Catalog queries, Submission, Signature or archive validation, Moderation, Withdrawal or reports, Key management, Database or audit, Deployment]
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Minimum reproduction with sanitized example metadata
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and sanitized logs
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing reports and removed tokens, keys, private packages, and personal data.
+          required: true
+        - label: This is not an unpatched security vulnerability.
+          required: true

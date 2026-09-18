@@ -1,0 +1,30 @@
+name: Catalog or policy proposal / 目录或政策建议
+description: Propose a scoped package, API, moderation, or governance improvement
+title: "[Proposal]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and affected package publishers or users
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed outcome
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Trust, moderation, compatibility, migration, and abuse impact
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing proposals and confirmed this belongs in the Community repository.
+          required: true
