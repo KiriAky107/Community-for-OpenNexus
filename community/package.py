@@ -110,18 +110,41 @@ def inspect(release: Release, blob: bytes):
         if set(value.get("permissions", [])) != set(release.permissions):
             raise ValueError("发行权限与类型清单不一致")
     if release.type in {"mcp", "persona", "template", "model"}:
-        value = json.loads(files[matches[0]])
+        def unique_object(pairs):
+            value = {}
+            for key, child in pairs:
+                if key in value:
+                    raise ValueError("清单字段重复")
+                value[key] = child
+            return value
+        if len(files[matches[0]]) > 1024 * 1024:
+            raise ValueError("清单超过 1 MiB")
+        value = json.loads(files[matches[0]], object_pairs_hook=unique_object)
         if not isinstance(value, dict): raise ValueError("清单必须为对象")
         forbidden = {"api_key", "password", "token", "secret", "chat_history", "messages"}
-        def check(node):
+        nodes, scalar_bytes = 0, 0
+        def check(node, depth=0):
+            nonlocal nodes, scalar_bytes
+            nodes += 1
+            if depth > 32 or nodes > 10000:
+                raise ValueError("清单层级或节点超过限制")
             if isinstance(node, dict):
                 if forbidden.intersection(str(k).lower() for k in node): raise ValueError("清单混入秘密或历史")
-                for child in node.values(): check(child)
+                for key, child in node.items():
+                    scalar_bytes += len(key.encode('utf-8'))
+                    check(child, depth + 1)
             elif isinstance(node, list):
-                for child in node: check(child)
+                for child in node: check(child, depth + 1)
+            elif isinstance(node, str):
+                scalar_bytes += len(node.encode('utf-8'))
+            if scalar_bytes > 1024 * 1024:
+                raise ValueError("清单文本超过限制")
         check(value)
         if release.type == "persona" and not isinstance(value.get("system_prompt"), str): raise ValueError("缺少人设提示")
-        if release.type == "template" and (not isinstance(value.get("markdown"), str) or value.get("executable")): raise ValueError("模板不能执行程序")
+        if release.type == "template":
+            from community.templates import validate_template
+            if validate_template(value) is not None and Version.parse(release.min_app_version) < Version(0, 6, 0):
+                raise ValueError("实验模板要求支持多文件导入的应用版本")
         if release.type == "model" and not all(value.get(k) for k in ["source", "revision", "license", "resources", "verified_platforms"]): raise ValueError("模型方案不完整")
         if release.type == "mcp":
             if value.get("transport") not in {"stdio", "streamable_http", "sse"}: raise ValueError("不支持 transport")
