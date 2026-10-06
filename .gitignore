@@ -9,3 +9,8 @@ __pycache__/
 *.key
 dist/
 build/
+/.build/
+/.local-plans/
+/docs/
+/documents/
+/frontend/docs/

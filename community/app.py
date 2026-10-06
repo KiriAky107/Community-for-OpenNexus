@@ -8,6 +8,7 @@ from pathlib import Path
 import secrets
 import sqlite3
 import time
+from typing import Literal
 
 from fastapi import FastAPI, Header, Query, Request
 from fastapi.exceptions import RequestValidationError
@@ -16,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
 
 from .package import Release, inspect, verify
+from .catalog_query import configure_connection, ensure_indexes, page, public
 
 
 class CatalogError(Exception):
@@ -58,13 +60,15 @@ class Registry:
                 CREATE TABLE IF NOT EXISTS submissions (id TEXT PRIMARY KEY, namespace TEXT NOT NULL, package_id TEXT NOT NULL, version TEXT NOT NULL, metadata TEXT NOT NULL, blob BLOB NOT NULL, author_id TEXT NOT NULL, state TEXT NOT NULL, UNIQUE(namespace,package_id,version));
                 CREATE TABLE IF NOT EXISTS audit (id INTEGER PRIMARY KEY AUTOINCREMENT, actor TEXT NOT NULL, action TEXT NOT NULL, subject TEXT NOT NULL, reason TEXT NOT NULL, timestamp INTEGER NOT NULL);
             """)
+            ensure_indexes(conn)
 
     @contextmanager
-    def connect(self):
+    def connect(self, *, write=True):
         conn = sqlite3.connect(self.path, timeout=20)
         conn.row_factory = sqlite3.Row
+        configure_connection(conn)
         try:
-            conn.execute("BEGIN IMMEDIATE")
+            conn.execute("BEGIN IMMEDIATE" if write else "BEGIN")
             yield conn
             conn.commit()
         except BaseException:
@@ -122,43 +126,46 @@ def create_app(registry: Registry, source_id="self-hosted", allowed_origins=()):
     def audit(conn, actor, action, subject, reason=""):
         conn.execute("INSERT INTO audit(actor,action,subject,reason,timestamp) VALUES (?,?,?,?,?)", (actor, action, subject, reason, int(time.time())))
 
-    def public(item):
-        metadata = json.loads(item["metadata"])
-        return {**metadata, "release_id": item["id"], "withdrawn": item["state"] == "withdrawn",
-                "download_path": "/catalog/v1/releases/" + item["id"] + "/archive"}
-
     @app.get("/health")
     def health(): return {"status": "ok"}
 
     @app.get("/catalog/v1/sources")
     def source():
-        with registry.connect() as conn:
+        with registry.connect(write=False) as conn:
             keys = [{"key_id": x["id"], "namespace": x["namespace"], "public_key": base64.b64encode(x["public_key"]).decode(), "revoked": bool(x["revoked"])} for x in conn.execute("SELECT * FROM keys")]
         return {"schema_version": 1, "source_id": source_id, "keys": keys}
 
     @app.get("/catalog/v1/packages")
-    def packages(q: str = Query(default="", max_length=120), type: str | None = None,
-                 offset: int = Query(default=0, ge=0), limit: int = Query(default=30, ge=1, le=100),
+    def packages(q: str = Query(default="", max_length=120), type: Literal["theme", "skill", "plugin", "mcp", "persona", "template", "model"] | None = None,
+                 offset: int = Query(default=0, ge=0, le=2147483647), limit: int = Query(default=30, ge=1, le=100),
                  if_none_match: str | None = Header(default=None)):
-        with registry.connect() as conn:
-            items = [public(x) for x in conn.execute("SELECT * FROM submissions WHERE state IN ('published','withdrawn') ORDER BY namespace,package_id,version")]
-        items = [x for x in items if (type is None or x["type"] == type) and q.casefold() in (x["name"] + " " + x["description"]).casefold()]
-        result = {"schema_version": 1, "items": items[offset:offset + limit], "total": len(items), "offset": offset}
-        etag = '"' + hashlib.sha256(json.dumps(result, sort_keys=True).encode()).hexdigest() + '"'
+        with registry.connect(write=False) as conn:
+            result = page(conn, query=q, kind=type, offset=offset, limit=limit)
+        etag = '"' + hashlib.sha256(json.dumps([source_id,q,type,result], sort_keys=True, ensure_ascii=False).encode()).hexdigest() + '"'
         if etag == if_none_match: return Response(status_code=304, headers={"ETag": etag})
         return JSONResponse(result, headers={"ETag": etag, "Cache-Control": "public, max-age=60"})
 
     @app.get("/catalog/v1/packages/{namespace}/{package_id}/releases")
-    def versions(namespace: str, package_id: str):
-        with registry.connect() as conn:
-            return {"items": [public(x) for x in conn.execute("SELECT * FROM submissions WHERE namespace=? AND package_id=? AND state IN ('published','withdrawn') ORDER BY version", (namespace, package_id))]}
+    def versions(namespace: str, package_id: str, offset: int = Query(default=0, ge=0, le=2147483647), limit: int = Query(default=100, ge=1, le=100),
+                 version: str | None = Query(default=None, min_length=1, max_length=120)):
+        with registry.connect(write=False) as conn:
+            result = page(conn, namespace=namespace, package_id=package_id, version=version, offset=offset, limit=limit)
+        return JSONResponse(result, headers={"Cache-Control": "no-store"})
+
+    @app.get("/catalog/v1/releases/{release_id}")
+    def release_metadata(release_id: str):
+        with registry.connect(write=False) as conn:
+            item = conn.execute(f"SELECT id,metadata,state FROM submissions WHERE id=? AND state IN ('published','withdrawn')", (release_id,)).fetchone()
+            if not item: raise CatalogError(404, "RELEASE_NOT_FOUND")
+            return JSONResponse(public(item), headers={"Cache-Control": "no-store"})
 
     @app.get("/catalog/v1/releases/{release_id}/archive")
     def archive(release_id: str):
         with registry.connect() as conn:
             item = conn.execute("SELECT * FROM submissions WHERE id=?", (release_id,)).fetchone()
             if not item or item["state"] not in {"published", "withdrawn"}: raise CatalogError(404, "RELEASE_NOT_FOUND")
-            release = Release.model_validate_json(item["metadata"])
+            try: release = Release.model_validate_json(item["metadata"])
+            except ValueError: raise CatalogError(422, "INVALID_RELEASE_METADATA") from None
             key = conn.execute("SELECT * FROM keys WHERE id=?", (release.key_id,)).fetchone()
             if item["state"] == "withdrawn" or not key or key["revoked"]: raise CatalogError(410, "RELEASE_WITHDRAWN")
             return Response(item["blob"], media_type="application/zip", headers={"Cache-Control": "no-store"})
@@ -198,7 +205,8 @@ def create_app(registry: Registry, source_id="self-hosted", allowed_origins=()):
             if not item: raise CatalogError(404, "SUBMISSION_NOT_FOUND")
             if item["author_id"] == actor["id"]: raise CatalogError(403, "SELF_REVIEW_FORBIDDEN")
             if item["state"] != "pending": raise CatalogError(409, "REVIEW_ALREADY_CLOSED")
-            release = Release.model_validate_json(item["metadata"])
+            try: release = Release.model_validate_json(item["metadata"])
+            except ValueError: raise CatalogError(422, "INVALID_RELEASE_METADATA") from None
             key = conn.execute("SELECT * FROM keys WHERE id=? AND revoked=0", (release.key_id,)).fetchone()
             if body.approve and not key: raise CatalogError(403, "UNTRUSTED_SIGNER")
             state = "published" if body.approve else "rejected"

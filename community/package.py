@@ -10,7 +10,8 @@ import zipfile
 from typing import Literal
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from semver import Version
 
 
 class Release(BaseModel):
@@ -19,7 +20,7 @@ class Release(BaseModel):
     namespace: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{1,63}$")
     package_id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{1,63}$")
     type: Literal["theme", "skill", "plugin", "mcp", "persona", "template", "model"]
-    version: str = Field(pattern=r"^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$")
+    version: str = Field(max_length=120)
     name: str = Field(min_length=1, max_length=120)
     author_id: str = Field(min_length=1, max_length=80)
     license: str = Field(min_length=1, max_length=80)
@@ -28,14 +29,27 @@ class Release(BaseModel):
     size: int = Field(gt=0, le=10 * 1024 * 1024)
     platforms: list[str] = Field(max_length=12)
     architectures: list[str] = Field(max_length=12)
-    min_app_version: str
-    max_app_version: str | None = None
+    min_app_version: str = Field(max_length=120)
+    max_app_version: str | None = Field(default=None, max_length=120)
     dependencies: dict[str, str] = Field(default_factory=dict, max_length=64)
     permissions: list[str] = Field(default_factory=list, max_length=64)
     changelog: str = Field(max_length=10000)
     published_at: str = Field(max_length=40)
     key_id: str = Field(pattern=r"^[a-zA-Z0-9-]{1,80}$")
     signature: str = Field(max_length=128)
+
+    @field_validator("version", "min_app_version", "max_app_version")
+    @classmethod
+    def semantic_version(cls, value):
+        if value is not None:
+            Version.parse(value)
+        return value
+
+    @model_validator(mode="after")
+    def compatibility_range(self):
+        if self.max_app_version is not None and Version.parse(self.max_app_version) < Version.parse(self.min_app_version):
+            raise ValueError("应用版本范围倒置")
+        return self
 
     @field_validator("license")
     @classmethod
