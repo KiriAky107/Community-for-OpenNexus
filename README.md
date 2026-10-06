@@ -160,21 +160,51 @@ uv run python -m community add-key --id KEY_ID --namespace NAMESPACE --public-ke
 
 Tokens are written only to a requested new file and are not printed. The service accepts Base64 Ed25519 public keys only and must never receive a private signing key. Protect token files with operating-system ACLs.
 
+Authors and moderators can use the same CLI against an HTTPS catalog. `COMMUNITY_URL` supplies its base URL; `--token-file` reads the existing role token. Every mutation is an explicit command. Package checks verify the archive and signed metadata before submission.
+
+```powershell
+uv run python -m community check-package --release-file release.json --archive-file package.zip --public-key-file author-key.txt
+uv run python -m community submit --release-file release.json --archive-file package.zip --public-key-file author-key.txt --token-file author.token
+uv run python -m community submissions --package-id PACKAGE_ID --version VERSION --token-file author.token
+uv run python -m community reviews --offset 0 --limit 30 --token-file moderator.token
+uv run python -m community review --submission-id SUBMISSION_ID --approve --reason "Reviewed package and permissions" --token-file moderator.token
+uv run python -m community reports --token-file moderator.token
+uv run python -m community resolve-report --report-id REPORT_ID --decision addressed --reason "Recorded resolution" --token-file moderator.token
+uv run python -m community audit --after 0 --limit 30 --token-file moderator.token
+```
+
+Use `--reject` for rejection, `withdraw --release-id ID --reason TEXT` for withdrawal, `report --release-id ID --reason TEXT` for a report, and `revoke-key --key-id ID --reason TEXT` for key revocation. `status --submission-id ID` returns the authorized current state. Pages and audit cursors bound each response. Reports retain their original audit entry after resolution. An interrupted mutation exits with code 3 and `OUTCOME_UNKNOWN`; it is never automatically sent again. Inspect `submissions` or the current status before deciding what to do next. Redirects are refused. Loopback HTTP fixtures require the explicit `--allow-loopback-http` option.
+
+## Readiness, backup and recovery
+
+`/health` checks the process; `/ready` checks the existing database schema, access and write transaction availability without changing rows. It returns 503 when the database is unavailable. [The systemd unit](deployment/opennexus-community.service) and [environment example](deployment/community.env.example) use an unprivileged service account, a private data directory and a loopback listener. Install the checkout at `/opt/opennexus-community`, create the `opennexus-community` account, and place the reviewed environment file at `/etc/opennexus-community.env`. Install frozen dependencies with `uv sync --frozen --python /usr/bin/python3 --no-managed-python`, using a system Python 3.12 or later, so the protected home directory is not needed by the interpreter. An external TLS reverse proxy remains the operator's deployment responsibility.
+
+```powershell
+uv run python -m community backup --output-dir C:/private/catalog-backup
+uv run python -m community verify-backup --input-dir C:/private/catalog-backup --expected-sha256 RECORDED_SHA256
+uv run python -m community restore --input-dir C:/private/catalog-backup --output C:/private/restored-catalog.sqlite3 --expected-sha256 RECORDED_SHA256
+```
+
+Backups use SQLite's online snapshot API, including committed WAL data. The completion manifest records the database hash, row counts and signed archive checks. Preserve the returned hash separately. Verification checks the SQLite structure, metadata signatures and archive digests, retaining revoked keys, withdrawn releases, old signed versions and audit records. Interrupted bundles without a complete manifest fail verification. Restore writes a verified snapshot to a new output path and keeps account and release states intact. Backups contain account token hashes and must be protected by operating-system permissions. After verifying the restored database, stop the service and explicitly select that database in its environment configuration before restarting it.
+
 ## API overview
 
 | Route group | Access | Purpose |
 | --- | --- | --- |
 | `/health` | Public | Process health |
+| `/ready` | Public | Database readiness |
 | `/catalog/v1/sources` | Public | Source identity and public keys |
 | `/catalog/v1/packages` | Public | Searchable, paginated catalog with ETag |
 | `/catalog/v1/releases/.../archive` | Public if active | Package archive download |
 | `/catalog/v1/publish/submissions` | Author | Immutable namespace publication |
 | `/catalog/v1/moderation/reviews` | Moderator | Independent review queue and decision |
+| `/catalog/v1/publish/submissions/...` | Owner or moderator | Publication state and reply recovery |
+| `/catalog/v1/moderation/audit`, `/reports/...` | Moderator | Paged audit, reports and reasoned resolution |
 | `/withdraw`, `/reports`, `/keys/.../revoke` | Authenticated role | Incident and lifecycle controls |
 
 ## Production gaps
 
-The current bearer tokens do not expire. A production marketplace still requires account login, token rotation and revocation workflows, durable rate limiting, stronger moderator governance, availability monitoring, backup/restore procedures, abuse response, and a TLS reverse proxy. Do not present the prototype as a production marketplace.
+The current bearer tokens do not expire. A production marketplace still requires account login, token rotation and revocation workflows, durable rate limiting, stronger moderator governance, availability monitoring, abuse response, and a TLS reverse proxy. Do not present the prototype as a production marketplace.
 
 ## Security and community
 

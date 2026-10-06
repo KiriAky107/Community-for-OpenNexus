@@ -1,0 +1,25 @@
+[Unit]
+Description=OpenNexus Community catalog
+After=network.target
+
+[Service]
+Type=simple
+User=opennexus-community
+Group=opennexus-community
+WorkingDirectory=/opt/opennexus-community
+EnvironmentFile=/etc/opennexus-community.env
+ExecStart=/opt/opennexus-community/.venv/bin/python -m community serve --host 127.0.0.1 --port 8081
+StateDirectory=opennexus-community
+StateDirectoryMode=0700
+UMask=0077
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/opennexus-community
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

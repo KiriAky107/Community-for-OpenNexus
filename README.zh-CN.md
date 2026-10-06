@@ -159,21 +159,51 @@ uv run python -m community add-key --id KEY_ID --namespace NAMESPACE --public-ke
 
 Token 只写入指定的新文件，不在终端打印。服务只接收 Base64 Ed25519 公钥，绝不能接收私钥。Token 文件必须使用操作系统 ACL 限制读取。
 
+作者和审核员可以用同一 CLI 访问 HTTPS 目录。`COMMUNITY_URL` 指定服务地址，`--token-file` 读取现有角色 Token。每次写操作都由独立命令触发，提交前先核对归档和元数据签名。
+
+```powershell
+uv run python -m community check-package --release-file release.json --archive-file package.zip --public-key-file author-key.txt
+uv run python -m community submit --release-file release.json --archive-file package.zip --public-key-file author-key.txt --token-file author.token
+uv run python -m community submissions --package-id PACKAGE_ID --version VERSION --token-file author.token
+uv run python -m community reviews --offset 0 --limit 30 --token-file moderator.token
+uv run python -m community review --submission-id SUBMISSION_ID --approve --reason "已核对包内容和权限" --token-file moderator.token
+uv run python -m community reports --token-file moderator.token
+uv run python -m community resolve-report --report-id REPORT_ID --decision addressed --reason "记录处理结果" --token-file moderator.token
+uv run python -m community audit --after 0 --limit 30 --token-file moderator.token
+```
+
+拒绝审核使用 `--reject`；撤回使用 `withdraw --release-id ID --reason TEXT`，举报使用 `report --release-id ID --reason TEXT`，撤销签名密钥使用 `revoke-key --key-id ID --reason TEXT`。`status --submission-id ID` 返回权限范围内的真实状态。队列支持分页，审计使用游标；举报处理后仍保留原始审计记录。写请求中断时返回退出码 3 和 `OUTCOME_UNKNOWN`，不会自动重发。先查询 `submissions` 或当前状态，再决定后续操作。客户端拒绝重定向；隔离测试的本机 HTTP 地址必须显式添加 `--allow-loopback-http`。
+
+## 就绪检查、备份与恢复
+
+`/health` 检查进程，`/ready` 检查现有数据库的 schema、访问及写事务可用性，检查不改变记录；不可用时返回 503。[systemd 配置](deployment/opennexus-community.service) 和[环境变量示例](deployment/community.env.example) 使用非特权服务账号、私有数据目录和本机监听地址。将源码安装到 `/opt/opennexus-community`，创建 `opennexus-community` 账号，并将已核对的配置放到 `/etc/opennexus-community.env`。使用系统提供的 Python 3.12 或更新版本执行 `uv sync --frozen --python /usr/bin/python3 --no-managed-python`，避免解释器依赖被服务保护的用户主目录。对外的 TLS 反向代理由部署者配置。
+
+```powershell
+uv run python -m community backup --output-dir C:/private/catalog-backup
+uv run python -m community verify-backup --input-dir C:/private/catalog-backup --expected-sha256 RECORDED_SHA256
+uv run python -m community restore --input-dir C:/private/catalog-backup --output C:/private/restored-catalog.sqlite3 --expected-sha256 RECORDED_SHA256
+```
+
+备份采用 SQLite 在线快照 API，包含 WAL 中已提交的数据。完成清单记录数据库哈希、记录数量和签名归档检查；请另行保存返回的哈希。校验检查 SQLite 结构、元数据签名及归档摘要，保留已撤销的密钥、已撤回的发行、旧签名版本和审计记录。没有完整清单的中断备份无法通过校验。恢复必须提供已记录的哈希及新的输出路径，不会替换运行中的数据库，也不改变账号或发行状态。备份含账号 Token 哈希，需要操作系统权限保护。核对恢复结果后，先停止服务，再显式修改环境配置中的数据库路径并重启。
+
 ## API 概览
 
 | 路由 | 访问级别 | 用途 |
 | --- | --- | --- |
 | `/health` | 公开 | 进程健康 |
+| `/ready` | 公开 | 数据库就绪检查 |
 | `/catalog/v1/sources` | 公开 | 来源身份和公钥 |
 | `/catalog/v1/packages` | 公开 | 支持 ETag 的搜索和分页目录 |
 | `/catalog/v1/releases/.../archive` | 有效发行公开 | 下载扩展压缩包 |
 | `/catalog/v1/publish/submissions` | 作者 | 命名空间内不可变发布 |
 | `/catalog/v1/moderation/reviews` | 审核员 | 独立审核队列和决定 |
+| `/catalog/v1/publish/submissions/...` | 所有者或审核员 | 发布状态和丢失回执核对 |
+| `/catalog/v1/moderation/audit`、`/reports/...` | 审核员 | 审计分页、举报及带理由的处理 |
 | `/withdraw`、`/reports`、`/keys/.../revoke` | 相应认证角色 | 事件和生命周期控制 |
 
 ## 生产差距
 
-当前 Bearer Token 没有到期机制。生产市场仍需要账户登录、Token 轮换与撤销流程、持久限流、更完善的审核治理、可用性监控、备份恢复、滥用处理和 TLS 反向代理。不得将本原型描述为已经上线的生产市场。
+当前 Bearer Token 没有到期机制。生产市场仍需要账户登录、Token 轮换与撤销流程、持久限流、更完善的审核治理、可用性监控、滥用处理和 TLS 反向代理。不得将本原型描述为已经上线的生产市场。
 
 ## 安全与社区
 

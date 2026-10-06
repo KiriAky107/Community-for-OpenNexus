@@ -29,7 +29,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: KiriAky107/OpenNexus
-          ref: d3602e0e4a98fb9d76c5e3f769daf313cd61990b
+          ref: 80cc0335dd5d64a3b08a8cedd1760ced0d9a8630
           path: .contract-desktop
           persist-credentials: false
           sparse-checkout: |
@@ -59,7 +59,7 @@ jobs:
               assert not any(path.casefold().startswith(private) for path in paths), 'Private documentation must stay local'
           PY
       - run: uv run --frozen python -m compileall -q community
-      - name: Test SQLite queries, signatures, old schema and owned HTTP fixture
+      - name: Test queries, CLI HTTP, WAL backup recovery and deployment smoke
         run: uv run --frozen pytest -q --junitxml=.build/catalog-tests.xml
       - uses: actions/upload-artifact@v7
         if: always()
