@@ -25,14 +25,16 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - name: Read the fixed Desktop catalog contract
+      - name: Read the fixed Desktop catalog and experiment template contracts
         uses: actions/checkout@v7
         with:
           repository: KiriAky107/OpenNexus
-          ref: ad85de8e6b9925a65dd73fc70625ed4584370e17
+          ref: d3602e0e4a98fb9d76c5e3f769daf313cd61990b
           path: .contract-desktop
           persist-credentials: false
-          sparse-checkout: frontend/src/services/fixtures/community-v1-catalog.json
+          sparse-checkout: |
+            frontend/src/services/fixtures/community-v1-catalog.json
+            frontend/src/services/fixtures/community-v1-templates.json
           sparse-checkout-cone-mode: false
       - uses: actions/setup-python@v7
         with:
@@ -49,7 +51,8 @@ jobs:
           from pathlib import Path
           import subprocess
           desktop = Path('.contract-desktop')
-          assert Path('tests/fixtures/community-v1-catalog.json').read_bytes() == (desktop / 'frontend/src/services/fixtures/community-v1-catalog.json').read_bytes(), 'Community and Desktop catalog fixtures differ'
+          for name in ('community-v1-catalog.json', 'community-v1-templates.json'):
+              assert (Path('tests/fixtures') / name).read_bytes() == (desktop / 'frontend/src/services/fixtures' / name).read_bytes(), f'Community and Desktop contract differs: {name}'
           private = ('docs/', 'documents/', 'frontend/docs/', '.local-plans/')
           for repo in (Path('.'), desktop):
               paths = subprocess.check_output(['git', 'ls-files', '-z'], cwd=repo).decode('utf-8').split('\0')
