@@ -29,12 +29,14 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: KiriAky107/OpenNexus
-          ref: 80cc0335dd5d64a3b08a8cedd1760ced0d9a8630
+          ref: 8a5a6ada94de4d4071e3a500e33ca1c59cae9399
           path: .contract-desktop
           persist-credentials: false
           sparse-checkout: |
             frontend/src/services/fixtures/community-v1-catalog.json
             frontend/src/services/fixtures/community-v1-templates.json
+            frontend/src/services/fixtures/community-v1-configurations.json
+            backend/app/services/catalog_configuration_manifest.py
           sparse-checkout-cone-mode: false
       - uses: actions/setup-python@v7
         with:
@@ -51,8 +53,9 @@ jobs:
           from pathlib import Path
           import subprocess
           desktop = Path('.contract-desktop')
-          for name in ('community-v1-catalog.json', 'community-v1-templates.json'):
+          for name in ('community-v1-catalog.json', 'community-v1-templates.json', 'community-v1-configurations.json'):
               assert (Path('tests/fixtures') / name).read_bytes() == (desktop / 'frontend/src/services/fixtures' / name).read_bytes(), f'Community and Desktop contract differs: {name}'
+          assert Path('community/configurations.py').read_bytes() == (desktop / 'backend/app/services/catalog_configuration_manifest.py').read_bytes(), 'Community and Core configuration validators differ'
           private = ('docs/', 'documents/', 'frontend/docs/', '.local-plans/')
           for repo in (Path('.'), desktop):
               paths = subprocess.check_output(['git', 'ls-files', '-z'], cwd=repo).decode('utf-8').split('\0')
