@@ -14,10 +14,11 @@ from fastapi import FastAPI, Header, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .package import Release, inspect, verify
 from .catalog_query import configure_connection, ensure_indexes, page, public
+from .operations import readiness
 
 
 class CatalogError(Exception):
@@ -37,10 +38,26 @@ class Review(BaseModel):
     approve: bool
     reason: str = Field(min_length=1, max_length=2000)
 
+    @field_validator('reason')
+    @classmethod
+    def nonblank_reason(cls, value):
+        if not value.strip(): raise ValueError('REASON_REQUIRED')
+        return value
+
 
 class Reason(BaseModel):
     model_config = ConfigDict(extra="forbid")
     reason: str = Field(min_length=1, max_length=2000)
+
+    @field_validator('reason')
+    @classmethod
+    def nonblank_reason(cls, value):
+        if not value.strip(): raise ValueError('REASON_REQUIRED')
+        return value
+
+
+class ReportResolution(Reason):
+    decision: Literal['addressed', 'dismissed']
 
 
 class Registry:
@@ -61,6 +78,8 @@ class Registry:
                 CREATE TABLE IF NOT EXISTS audit (id INTEGER PRIMARY KEY AUTOINCREMENT, actor TEXT NOT NULL, action TEXT NOT NULL, subject TEXT NOT NULL, reason TEXT NOT NULL, timestamp INTEGER NOT NULL);
             """)
             ensure_indexes(conn)
+            conn.execute("CREATE INDEX IF NOT EXISTS moderation_pending ON submissions(id) WHERE state='pending'")
+            conn.execute('CREATE INDEX IF NOT EXISTS audit_action_subject ON audit(action,subject,id)')
 
     @contextmanager
     def connect(self, *, write=True):
@@ -124,10 +143,15 @@ def create_app(registry: Registry, source_id="self-hosted", allowed_origins=()):
         return actor
 
     def audit(conn, actor, action, subject, reason=""):
-        conn.execute("INSERT INTO audit(actor,action,subject,reason,timestamp) VALUES (?,?,?,?,?)", (actor, action, subject, reason, int(time.time())))
+        return conn.execute("INSERT INTO audit(actor,action,subject,reason,timestamp) VALUES (?,?,?,?,?)", (actor, action, subject, reason, int(time.time()))).lastrowid
 
     @app.get("/health")
     def health(): return {"status": "ok"}
+
+    @app.get('/ready')
+    def ready():
+        status = readiness(registry.path)
+        return JSONResponse(status or {'status': 'unavailable', 'error': {'code': 'DATABASE_NOT_READY'}}, status_code=200 if status else 503, headers={'Cache-Control': 'no-store'})
 
     @app.get("/catalog/v1/sources")
     def source():
@@ -192,10 +216,57 @@ def create_app(registry: Registry, source_id="self-hosted", allowed_origins=()):
             return {"submission_id": submission_id, "state": "pending"}
 
     @app.get("/catalog/v1/moderation/reviews")
-    def pending(authorization: str = Header(default="")):
-        with registry.connect() as conn:
+    def pending(offset: int = Query(default=0, ge=0, le=2147483647), limit: int = Query(default=30, ge=1, le=100), authorization: str = Header(default="")):
+        with registry.connect(write=False) as conn:
             principal(conn, authorization, "moderator")
-            return {"items": [{"submission_id": x["id"], "release": json.loads(x["metadata"])} for x in conn.execute("SELECT * FROM submissions WHERE state='pending'")]}
+            total = conn.execute("SELECT COUNT(*) FROM submissions WHERE state='pending'").fetchone()[0]
+            rows = conn.execute("SELECT id,metadata FROM submissions WHERE state='pending' ORDER BY id LIMIT ? OFFSET ?", (limit, offset))
+            return {'schema_version': 1, 'total': total, 'offset': offset, 'limit': limit, 'items': [{"submission_id": x["id"], "release": json.loads(x["metadata"])} for x in rows]}
+
+    @app.get('/catalog/v1/publish/submissions/{submission_id}')
+    def submission_status(submission_id: str, authorization: str = Header(default='')):
+        with registry.connect(write=False) as conn:
+            actor = principal(conn, authorization)
+            item = conn.execute('SELECT id,metadata,author_id,state FROM submissions WHERE id=?', (submission_id,)).fetchone()
+            if not item: raise CatalogError(404, 'SUBMISSION_NOT_FOUND')
+            if actor['role'] != 'moderator' and actor['id'] != item['author_id']: raise CatalogError(403, 'OWNERSHIP_REQUIRED')
+            return {'schema_version': 1, 'submission_id': item['id'], 'state': item['state'], 'release': json.loads(item['metadata'])}
+
+    @app.get('/catalog/v1/publish/submissions')
+    def own_submissions(package_id: str | None = Query(default=None, max_length=64), version: str | None = Query(default=None, max_length=120), offset: int = Query(default=0, ge=0, le=2147483647), limit: int = Query(default=30, ge=1, le=100), authorization: str = Header(default='')):
+        with registry.connect(write=False) as conn:
+            actor = principal(conn, authorization)
+            conditions, values = [], []
+            if actor['role'] != 'moderator': conditions.append('author_id=?'); values.append(actor['id'])
+            if package_id is not None: conditions.append('package_id=?'); values.append(package_id)
+            if version is not None: conditions.append('version=?'); values.append(version)
+            where = ' AND '.join(conditions) or '1'
+            total = conn.execute(f'SELECT COUNT(*) FROM submissions WHERE {where}', values).fetchone()[0]
+            rows = conn.execute(f'SELECT id,metadata,state FROM submissions WHERE {where} ORDER BY id LIMIT ? OFFSET ?', [*values, limit, offset])
+            return {'schema_version': 1, 'total': total, 'offset': offset, 'limit': limit, 'items': [{'submission_id': row['id'], 'state': row['state'], 'release': json.loads(row['metadata'])} for row in rows]}
+
+    @app.get('/catalog/v1/moderation/audit')
+    def audit_page(after: int = Query(default=0, ge=0, le=9223372036854775807), limit: int = Query(default=30, ge=1, le=100), authorization: str = Header(default='')):
+        with registry.connect(write=False) as conn:
+            principal(conn, authorization, 'moderator')
+            rows = conn.execute('SELECT id,actor,action,subject,reason,timestamp FROM audit WHERE id>? ORDER BY id LIMIT ?', (after, limit + 1)).fetchall()
+            return {'schema_version': 1, 'items': [dict(row) for row in rows[:limit]], 'next_cursor': rows[limit - 1]['id'] if len(rows) > limit else None}
+
+    @app.get('/catalog/v1/moderation/reports')
+    def report_queue(after: int = Query(default=0, ge=0, le=9223372036854775807), limit: int = Query(default=30, ge=1, le=100), authorization: str = Header(default='')):
+        with registry.connect(write=False) as conn:
+            principal(conn, authorization, 'moderator')
+            rows = conn.execute("SELECT id,actor,subject AS release_id,reason,timestamp FROM audit AS report WHERE action='report' AND id>? AND NOT EXISTS (SELECT 1 FROM audit AS resolution WHERE resolution.action='resolve-report' AND resolution.subject=CAST(report.id AS TEXT)) ORDER BY id LIMIT ?", (after, limit + 1)).fetchall()
+            return {'schema_version': 1, 'items': [dict(row) for row in rows[:limit]], 'next_cursor': rows[limit - 1]['id'] if len(rows) > limit else None}
+
+    @app.post('/catalog/v1/moderation/reports/{report_id}/resolve')
+    def resolve_report(report_id: int, body: ReportResolution, authorization: str = Header(default='')):
+        with registry.connect() as conn:
+            actor = principal(conn, authorization, 'moderator')
+            if not conn.execute("SELECT 1 FROM audit WHERE id=? AND action='report'", (report_id,)).fetchone(): raise CatalogError(404, 'REPORT_NOT_FOUND')
+            if conn.execute("SELECT 1 FROM audit WHERE action='resolve-report' AND subject=?", (str(report_id),)).fetchone(): raise CatalogError(409, 'REPORT_ALREADY_RESOLVED')
+            audit(conn, actor['id'], 'resolve-report', str(report_id), body.model_dump_json())
+            return {'state': 'resolved', 'report_id': report_id, 'decision': body.decision}
 
     @app.post("/catalog/v1/moderation/reviews")
     def review(body: Review, authorization: str = Header(default="")):
@@ -231,13 +302,14 @@ def create_app(registry: Registry, source_id="self-hosted", allowed_origins=()):
         with registry.connect() as conn:
             actor = principal(conn, authorization)
             if not conn.execute("SELECT 1 FROM submissions WHERE id=?", (release_id,)).fetchone(): raise CatalogError(404, "RELEASE_NOT_FOUND")
-            audit(conn, actor["id"], "report", release_id, body.reason)
-            return {"state": "reported"}
+            report_id = audit(conn, actor["id"], "report", release_id, body.reason)
+            return {"state": "reported", 'report_id': report_id}
 
     @app.post("/catalog/v1/keys/{key_id}/revoke")
     def revoke(key_id: str, body: Reason, authorization: str = Header(default="")):
         with registry.connect() as conn:
             actor = principal(conn, authorization, "moderator")
+            if not conn.execute('SELECT 1 FROM keys WHERE id=?', (key_id,)).fetchone(): raise CatalogError(404, 'KEY_NOT_FOUND')
             conn.execute("UPDATE keys SET revoked=1 WHERE id=?", (key_id,))
             audit(conn, actor["id"], "revoke-key", key_id, body.reason)
             return {"state": "revoked"}
