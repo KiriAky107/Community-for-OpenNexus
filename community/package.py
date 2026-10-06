@@ -119,8 +119,16 @@ def inspect(release: Release, blob: bytes):
             return value
         if len(files[matches[0]]) > 1024 * 1024:
             raise ValueError("清单超过 1 MiB")
-        value = json.loads(files[matches[0]], object_pairs_hook=unique_object)
+        def finite_only(value):
+            raise ValueError('Non-finite JSON number')
+        value = json.loads(files[matches[0]], object_pairs_hook=unique_object, parse_constant=finite_only)
         if not isinstance(value, dict): raise ValueError("清单必须为对象")
+        if ('schema_version' in value and (type(value['schema_version']) is not int or value['schema_version'] != 1)):
+            raise ValueError('Unsupported manifest schema')
+        permissions = value.get('permissions', [])
+        if (not isinstance(permissions, list) or not all(isinstance(key, str) for key in permissions)
+                or len(set(permissions)) != len(permissions) or set(permissions) != set(release.permissions)):
+            raise ValueError('Release and manifest permissions differ')
         forbidden = {"api_key", "password", "token", "secret", "chat_history", "messages"}
         nodes, scalar_bytes = 0, 0
         def check(node, depth=0):
@@ -145,8 +153,7 @@ def inspect(release: Release, blob: bytes):
             from community.templates import validate_template
             if validate_template(value) is not None and Version.parse(release.min_app_version) < Version(0, 6, 0):
                 raise ValueError("实验模板要求支持多文件导入的应用版本")
-        if release.type == "model" and not all(value.get(k) for k in ["source", "revision", "license", "resources", "verified_platforms"]): raise ValueError("模型方案不完整")
-        if release.type == "mcp":
-            if value.get("transport") not in {"stdio", "streamable_http", "sse"}: raise ValueError("不支持 transport")
-            if value["transport"] == "stdio" and not isinstance(value.get("args"), list): raise ValueError("参数必须为数组")
+        if release.type in {'model', 'mcp'}:
+            from community.configurations import validate_configuration
+            validate_configuration(release.type, value)
     return {"files": len(files), "expanded_size": total, "manifest": matches[0]}

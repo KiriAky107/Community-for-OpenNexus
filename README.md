@@ -140,6 +140,10 @@ The inspector:
 | Template | `template.json` |
 | Model profile | `model.json` |
 
+MCP arguments must be strings. Use `secret_environment_keys` or `secret_header_keys` to declare credentials; plain token and authorization values are rejected. Packages cannot supply enabled, trust, test or target-version state. Applying a reviewed MCP configuration in the desktop leaves it disabled until the user reviews, tests and enables it separately.
+
+Model plans require nonempty `source`, `revision`, `license`, a resource object and a list of verified platforms. A plan for the desktop's local embedding runtime adds `model_key` and a `runtime_config` whose `embedding_model` matches that key. CPU threads, memory and timeout values are bounded integers. The desktop checks the model's exact pinned repository, revision and license before applying settings. Weight installation and reindexing remain explicit actions. [Executable configuration examples](tests/fixtures/community-v1-configurations.json) are shared with the desktop and checked in CI; metadata-only plans remain readable.
+
 ## Development
 
 ```powershell
