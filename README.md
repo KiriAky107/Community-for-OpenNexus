@@ -2,14 +2,24 @@
 
 [简体中文](README.zh-CN.md) | **English**
 
-[![Version](https://img.shields.io/badge/version-0.5.2--alpha1-5865f2)](https://github.com/KiriAky107/Community-for-OpenNexus/releases/tag/v0.5.2-alpha1)
+[![Version](https://img.shields.io/badge/version-0.6.0-5865f2)](https://github.com/KiriAky107/Community-for-OpenNexus/releases/tag/v0.6.0)
 ![Python](https://img.shields.io/badge/Python-3.12%2B-3776ab)
-![Status](https://img.shields.io/badge/status-alpha-f59e0b)
 [![License](https://img.shields.io/badge/license-MIT-22c55e)](LICENSE)
 
-Community for OpenNexus is an independent prototype catalog for publishing, signing, reviewing, discovering, withdrawing, and reporting OpenNexus extension packages. Supported package types are themes, Skills, Plugins, MCP configurations, personas, templates, and model installation profiles.
+Community for OpenNexus is an independent package catalog for publishing, signing, reviewing, discovering, withdrawing, and reporting OpenNexus extension packages. Supported package types are themes, Skills, Plugins, MCP configurations, personas, templates, and model installation profiles.
 
-> This is an alpha engineering prototype, not a production marketplace. It stores package archives and catalog identities, but never user Vaults, model-provider credentials, private signing keys, or Sync Server sessions.
+The service stores package archives and catalog identities. User vaults, model-provider credentials, private signing keys and Sync sessions stay with their respective owners.
+
+
+## What’s New in 0.6.0
+
+- Filter, count and paginate catalogs in database queries, with semantic version ordering and query-specific ETags.
+- Pair with desktop pagination, installed-version comparison and reviewed updates, including source, permissions, dependency and compatibility checks.
+- Personas, experiment templates, MCP configurations and model profiles use shared declarative contracts. Templates preserve actual source and input extensions.
+- Author and moderator CLIs validate submissions, require independent review and handle withdrawal, reports and cursor-based audit records while keeping releases immutable.
+- Provide readiness checks, online SQLite snapshots, digest and signature verification, and restoration into a new target. GitHub CI verifies deployment packages and fixed source archives.
+
+Companion releases: OpenNexus **0.6.0**, Sync for OpenNexus **0.6.0**, and Community for OpenNexus **0.6.0**. Sync uses `/sync/v1`; Community uses `/catalog/v1`. Product versions and protocol versions are maintained separately.
 
 ## Trust model and architecture
 

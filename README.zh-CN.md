@@ -2,14 +2,24 @@
 
 **简体中文** | [English](README.md)
 
-[![版本](https://img.shields.io/badge/version-0.5.2--alpha1-5865f2)](https://github.com/KiriAky107/Community-for-OpenNexus/releases/tag/v0.5.2-alpha1)
+[![版本](https://img.shields.io/badge/version-0.6.0-5865f2)](https://github.com/KiriAky107/Community-for-OpenNexus/releases/tag/v0.6.0)
 ![Python](https://img.shields.io/badge/Python-3.12%2B-3776ab)
-![状态](https://img.shields.io/badge/status-alpha-f59e0b)
 [![许可证](https://img.shields.io/badge/license-MIT-22c55e)](LICENSE)
 
-Community for OpenNexus 是一个独立的扩展目录原型，用于发布、签名、审核、发现、撤回和举报 OpenNexus 扩展包，支持主题、Skill、Plugin、MCP 配置、Persona、模板和模型安装方案。
+Community for OpenNexus 是一个独立的扩展目录服务，用于发布、签名、审核、发现、撤回和举报 OpenNexus 扩展包，支持主题、Skill、Plugin、MCP 配置、Persona、模板和模型安装方案。
 
-> 当前实现是 Alpha 工程原型，不是生产市场。它保存扩展压缩包和目录身份，但不保存用户 Vault、模型提供商凭据、私钥或 Sync Server 会话。
+服务保存扩展压缩包和目录身份。用户 Vault、模型提供商凭据、私钥和 Sync 会话由各自所有者管理。
+
+
+## 0.6.0 更新
+
+- 目录在数据库查询层过滤、计数和分页，版本按语义版本排序，并提供查询一致的 ETag。
+- 配套桌面完整分页、已安装版本和更新审核，支持来源、权限、依赖与兼容信息核对。
+- Persona、实验模板、MCP 配置与模型方案使用统一声明契约，模板保留源文件和输入的真实扩展名。
+- 作者与审核员 CLI 支持提交校验、独立审核、撤回、举报处理和游标审计，发行保持不可变。
+- 提供就绪检查、在线 SQLite 备份、摘要与签名校验及新目标恢复，GitHub CI 验证部署包和固定源码。
+
+配套版本：OpenNexus **0.6.0**、Sync for OpenNexus **0.6.0**、Community for OpenNexus **0.6.0**。Sync 使用 `/sync/v1`，Community 使用 `/catalog/v1`；产品版本与协议版本分别维护。
 
 ## 信任模型与架构
 
