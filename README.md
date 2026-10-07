@@ -1,15 +1,26 @@
-# Community for OpenNexus
+<div align="center">
 
-[简体中文](README.zh-CN.md) | **English**
+  <img src=".github/assets/opennexus-logo.svg" alt="OpenNexus Logo" width="100" height="100" />
 
-[![Version](https://img.shields.io/badge/version-0.6.0-5865f2)](https://github.com/KiriAky107/Community-for-OpenNexus/releases/tag/v0.6.0)
-![Python](https://img.shields.io/badge/Python-3.12%2B-3776ab)
-[![License](https://img.shields.io/badge/license-MIT-22c55e)](LICENSE)
+  <h1>Community for OpenNexus</h1>
 
-Community for OpenNexus is an independent package catalog for publishing, signing, reviewing, discovering, withdrawing, and reporting OpenNexus extension packages. Supported package types are themes, Skills, Plugins, MCP configurations, personas, templates, and model installation profiles.
+  <p><strong>A Signed Extension Catalog for OpenNexus</strong></p>
 
-The service stores package archives and catalog identities. User vaults, model-provider credentials, private signing keys and Sync sessions stay with their respective owners.
+  <p>Discover OpenNexus extensions, inspect their permissions and sources, and publish signed packages through independent review.</p>
 
+  <p>
+    <a href="README.zh-CN.md">简体中文</a> • <a href="#quick-start">Quick Start</a> • <a href="#highlights">Highlights</a> • <a href="#architecture">Architecture</a> • <a href="#development">Development</a> • <a href="https://github.com/KiriAky107/Community-for-OpenNexus/releases">Releases</a>
+  </p>
+
+  <p>
+    <a href="https://github.com/KiriAky107/Community-for-OpenNexus/releases/tag/v0.6.0"><img src="https://img.shields.io/badge/Version-0.6.0-5865f2?style=flat-square" alt="Version" /></a> <a href="https://github.com/KiriAky107/Community-for-OpenNexus/actions/workflows/ci.yml"><img src="https://github.com/KiriAky107/Community-for-OpenNexus/actions/workflows/ci.yml/badge.svg" alt="CI" /></a> <img src="https://img.shields.io/badge/Python-3.12%2B-3776ab?style=flat-square" alt="Python 3.12+" /> <img src="https://img.shields.io/badge/API-FastAPI-05998b?style=flat-square" alt="FastAPI" /> <img src="https://img.shields.io/badge/Signatures-Ed25519-6366f1?style=flat-square" alt="Ed25519" /> <img src="https://img.shields.io/badge/Metadata-SQLite-003b57?style=flat-square" alt="SQLite" /> <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22c55e?style=flat-square" alt="MIT License" /></a>
+  </p>
+
+</div>
+
+---
+
+Current release: [v0.6.0](https://github.com/KiriAky107/Community-for-OpenNexus/releases/tag/v0.6.0).
 
 ## What’s New in 0.6.0
 
@@ -19,9 +30,45 @@ The service stores package archives and catalog identities. User vaults, model-p
 - Author and moderator CLIs validate submissions, require independent review and handle withdrawal, reports and cursor-based audit records while keeping releases immutable.
 - Provide readiness checks, online SQLite snapshots, digest and signature verification, and restoration into a new target. GitHub CI verifies deployment packages and fixed source archives.
 
-Companion releases: OpenNexus **0.6.0**, Sync for OpenNexus **0.6.0**, and Community for OpenNexus **0.6.0**. Sync uses `/sync/v1`; Community uses `/catalog/v1`. Product versions and protocol versions are maintained separately.
+## Highlights
 
-## Trust model and architecture
+- **Discover extensions**: Search and paginate a versioned catalog of themes, Skills, Plugins, MCP configurations, personas, templates and model profiles.
+- **Inspect before installing**: Review authors, compatibility, dependencies, permissions and signed archive metadata before the desktop asks for installation approval.
+- **Author-owned signatures**: Sign with a local Ed25519 private key. The catalog receives the public key, signed metadata and archive, and verifies their integrity.
+- **Independent review**: Submit a unique version, inspect its status, and have a separate moderator approve or reject it with a recorded reason.
+- **Traceable package states**: Preserve immutable versions and audit records across reporting, withdrawal and signing-key revocation.
+- **Recoverable catalog data**: Check readiness, take online SQLite snapshots and verify signatures and hashes before restoring to a new target.
+
+## Quick Start
+
+```powershell
+uv sync --frozen
+uv run python -m community serve
+```
+
+The development server binds to `127.0.0.1:8081`. Configure `COMMUNITY_DATABASE_PATH` to a managed location and `COMMUNITY_ALLOWED_ORIGINS` to an explicit comma-separated allowlist before deployment. Put any externally reachable instance behind TLS, authentication controls, rate limiting, monitoring, and backups.
+
+After starting the service, check `/health`, `/ready` and `/catalog/v1/packages`. Configure OpenNexus to use the catalog URL. Create author and moderator identities only if you need to publish; see [Administration](#administration).
+
+## Core Workflows
+
+### 1. Find and install a package
+
+Browse the catalog in OpenNexus, compare the installed and available versions, then inspect source, permissions, dependencies and compatibility. The desktop verifies the downloaded package and asks for installation approval; publication does not grant execution permissions.
+
+### 2. Publish and review a signed version
+
+Prepare the manifest and ZIP, sign canonical release metadata locally, and run `check-package`. Submit with the author's token, then use a separate moderator identity to inspect and decide the submission. See [Administration](#administration) for the current CLI commands.
+
+### 3. Handle an update or incident
+
+Publish an update as a new immutable version. If a package needs investigation, report it with a reason; authors or moderators can withdraw a published release. For an interrupted mutation, query the current submission or release state before choosing the next action. Revoked signatures and withdrawn archives become unavailable.
+
+### 4. Back up the catalog
+
+Create an online snapshot, preserve its recorded hash separately, and verify it before restoring to a new database path. Select the restored database only after checking the result; see [Backup and Recovery](#backup-and-recovery).
+
+## Architecture
 
 ```mermaid
 flowchart LR
@@ -38,7 +85,7 @@ flowchart LR
 
 The catalog verifies publication integrity and moderation state. Installation remains a separate desktop-host trust decision: a published package is not automatically safe or authorized to run.
 
-## Package publication flow
+## Package Publication Flow
 
 ```mermaid
 sequenceDiagram
@@ -66,7 +113,7 @@ sequenceDiagram
     Client->>Client: Reverify and request installation permission
 ```
 
-## Release lifecycle
+## Release Lifecycle
 
 ```mermaid
 stateDiagram-v2
@@ -84,7 +131,7 @@ stateDiagram-v2
 
 Versions are immutable by `(namespace, package_id, version)`. Withdrawal preserves metadata and audit history; it does not silently replace the archive with another build.
 
-## Database model
+## Database Model
 
 ```mermaid
 erDiagram
@@ -127,7 +174,7 @@ erDiagram
 
 The current schema version is `1`. Logical namespace and signer relations are verified in application transactions even where SQLite foreign keys are not declared.
 
-## Package validation
+## Package Validation
 
 Every release declares namespace, package ID, semantic version, type, author, license, SHA-256, size, platforms, architectures, compatible app versions, dependencies, permissions, changelog, signer key, and Ed25519 signature.
 
@@ -154,15 +201,15 @@ MCP arguments must be strings. Use `secret_environment_keys` or `secret_header_k
 
 Model plans require nonempty `source`, `revision`, `license`, a resource object and a list of verified platforms. A plan for the desktop's local embedding runtime adds `model_key` and a `runtime_config` whose `embedding_model` matches that key. CPU threads, memory and timeout values are bounded integers. The desktop checks the model's exact pinned repository, revision and license before applying settings. Weight installation and reindexing remain explicit actions. [Executable configuration examples](tests/fixtures/community-v1-configurations.json) are shared with the desktop and checked in CI; metadata-only plans remain readable.
 
-## Development
+## Ecosystem Repositories
 
-```powershell
-uv sync --frozen
-uv run pytest
-uv run python -m community serve
-```
+| Repository | Role |
+| --- | --- |
+| [OpenNexus](https://github.com/KiriAky107/OpenNexus) | Local vault editing, AI workflows and reviewed extension installation |
+| [Sync for OpenNexus](https://github.com/KiriAky107/Sync-for-OpenNexus) | Optional self-hosted vault synchronization and recovery |
+| [Community for OpenNexus](https://github.com/KiriAky107/Community-for-OpenNexus) | Independent signed package catalog and publication review |
 
-The development server binds to `127.0.0.1:8081`. Configure `COMMUNITY_DATABASE_PATH` to a managed location and `COMMUNITY_ALLOWED_ORIGINS` to an explicit comma-separated allowlist before deployment. Put any externally reachable instance behind TLS, authentication controls, rate limiting, monitoring, and backups.
+The services are optional and separately deployed. Sync uses `/sync/v1`; Community uses `/catalog/v1`. Product versions and protocol versions are maintained separately.
 
 ## Administration
 
@@ -189,7 +236,7 @@ uv run python -m community audit --after 0 --limit 30 --token-file moderator.tok
 
 Use `--reject` for rejection, `withdraw --release-id ID --reason TEXT` for withdrawal, `report --release-id ID --reason TEXT` for a report, and `revoke-key --key-id ID --reason TEXT` for key revocation. `status --submission-id ID` returns the authorized current state. Pages and audit cursors bound each response. Reports retain their original audit entry after resolution. An interrupted mutation exits with code 3 and `OUTCOME_UNKNOWN`; it is never automatically sent again. Inspect `submissions` or the current status before deciding what to do next. Redirects are refused. Loopback HTTP fixtures require the explicit `--allow-loopback-http` option.
 
-## Readiness, backup and recovery
+## Backup and Recovery
 
 `/health` checks the process; `/ready` checks the existing database schema, access and write transaction availability without changing rows. It returns 503 when the database is unavailable. [The systemd unit](deployment/opennexus-community.service) and [environment example](deployment/community.env.example) use an unprivileged service account, a private data directory and a loopback listener. Install the checkout at `/opt/opennexus-community`, create the `opennexus-community` account, and place the reviewed environment file at `/etc/opennexus-community.env`. Install frozen dependencies with `uv sync --frozen --python /usr/bin/python3 --no-managed-python`, using a system Python 3.12 or later, so the protected home directory is not needed by the interpreter. An external TLS reverse proxy remains the operator's deployment responsibility.
 
@@ -201,7 +248,7 @@ uv run python -m community restore --input-dir C:/private/catalog-backup --outpu
 
 Backups use SQLite's online snapshot API, including committed WAL data. The completion manifest records the database hash, row counts and signed archive checks. Preserve the returned hash separately. Verification checks the SQLite structure, metadata signatures and archive digests, retaining revoked keys, withdrawn releases, old signed versions and audit records. Interrupted bundles without a complete manifest fail verification. Restore writes a verified snapshot to a new output path and keeps account and release states intact. Backups contain account token hashes and must be protected by operating-system permissions. After verifying the restored database, stop the service and explicitly select that database in its environment configuration before restarting it.
 
-## API overview
+## API Overview
 
 | Route group | Access | Purpose |
 | --- | --- | --- |
@@ -216,11 +263,20 @@ Backups use SQLite's online snapshot API, including committed WAL data. The comp
 | `/catalog/v1/moderation/audit`, `/reports/...` | Moderator | Paged audit, reports and reasoned resolution |
 | `/withdraw`, `/reports`, `/keys/.../revoke` | Authenticated role | Incident and lifecycle controls |
 
-## Production gaps
+## Development
+
+```powershell
+uv sync --frozen
+uv run pytest
+```
+
+Use temporary databases and synthetic package fixtures for tests. Keep author tokens, private signing keys and production catalogs outside the checkout.
+
+## Deployment Notes
 
 The current bearer tokens do not expire. A production marketplace still requires account login, token rotation and revocation workflows, durable rate limiting, stronger moderator governance, availability monitoring, abuse response, and a TLS reverse proxy. Do not present the prototype as a production marketplace.
 
-## Security and community
+## Security and Contributing
 
 - Never submit secrets, private keys, personal information, chat history, or user Vault content in a package.
 - A package license must be explicit; `unknown`, `none`, `unlicensed`, and `tbd` are rejected.
@@ -228,8 +284,6 @@ The current bearer tokens do not expire. A production marketplace still requires
 - Vulnerabilities follow [SECURITY.md](SECURITY.md).
 - Contributions follow [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md).
 - Use repository Issue forms for catalog defects and package-policy proposals.
-
-Related repositories: [OpenNexus](https://github.com/KiriAky107/OpenNexus) and [Sync for OpenNexus](https://github.com/KiriAky107/Sync-for-OpenNexus).
 
 ## License
 

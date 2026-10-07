@@ -1,15 +1,26 @@
-# Community for OpenNexus
+<div align="center">
 
-**简体中文** | [English](README.md)
+  <img src=".github/assets/opennexus-logo.svg" alt="OpenNexus Logo" width="100" height="100" />
 
-[![版本](https://img.shields.io/badge/version-0.6.0-5865f2)](https://github.com/KiriAky107/Community-for-OpenNexus/releases/tag/v0.6.0)
-![Python](https://img.shields.io/badge/Python-3.12%2B-3776ab)
-[![许可证](https://img.shields.io/badge/license-MIT-22c55e)](LICENSE)
+  <h1>Community for OpenNexus</h1>
 
-Community for OpenNexus 是一个独立的扩展目录服务，用于发布、签名、审核、发现、撤回和举报 OpenNexus 扩展包，支持主题、Skill、Plugin、MCP 配置、Persona、模板和模型安装方案。
+  <p><strong>OpenNexus 的签名扩展目录</strong></p>
 
-服务保存扩展压缩包和目录身份。用户 Vault、模型提供商凭据、私钥和 Sync 会话由各自所有者管理。
+  <p>发现 OpenNexus 扩展，核对权限与来源，并通过独立审核发布签名扩展包。</p>
 
+  <p>
+    <a href="README.md">English</a> • <a href="#快速开始">快速开始</a> • <a href="#核心亮点">核心亮点</a> • <a href="#系统架构">系统架构</a> • <a href="#本地开发">本地开发</a> • <a href="https://github.com/KiriAky107/Community-for-OpenNexus/releases">发布日志</a>
+  </p>
+
+  <p>
+    <a href="https://github.com/KiriAky107/Community-for-OpenNexus/releases/tag/v0.6.0"><img src="https://img.shields.io/badge/Version-0.6.0-5865f2?style=flat-square" alt="版本" /></a> <a href="https://github.com/KiriAky107/Community-for-OpenNexus/actions/workflows/ci.yml"><img src="https://github.com/KiriAky107/Community-for-OpenNexus/actions/workflows/ci.yml/badge.svg" alt="CI" /></a> <img src="https://img.shields.io/badge/Python-3.12%2B-3776ab?style=flat-square" alt="Python 3.12+" /> <img src="https://img.shields.io/badge/API-FastAPI-05998b?style=flat-square" alt="FastAPI" /> <img src="https://img.shields.io/badge/Signatures-Ed25519-6366f1?style=flat-square" alt="Ed25519" /> <img src="https://img.shields.io/badge/Metadata-SQLite-003b57?style=flat-square" alt="SQLite" /> <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22c55e?style=flat-square" alt="MIT License" /></a>
+  </p>
+
+</div>
+
+---
+
+当前版本： [v0.6.0](https://github.com/KiriAky107/Community-for-OpenNexus/releases/tag/v0.6.0)。
 
 ## 0.6.0 更新
 
@@ -19,9 +30,45 @@ Community for OpenNexus 是一个独立的扩展目录服务，用于发布、�
 - 作者与审核员 CLI 支持提交校验、独立审核、撤回、举报处理和游标审计，发行保持不可变。
 - 提供就绪检查、在线 SQLite 备份、摘要与签名校验及新目标恢复，GitHub CI 验证部署包和固定源码。
 
-配套版本：OpenNexus **0.6.0**、Sync for OpenNexus **0.6.0**、Community for OpenNexus **0.6.0**。Sync 使用 `/sync/v1`，Community 使用 `/catalog/v1`；产品版本与协议版本分别维护。
+## 核心亮点
 
-## 信任模型与架构
+- **发现扩展**：搜索并分页浏览主题、Skill、Plugin、MCP 配置、Persona、模板和模型方案的版本目录。
+- **安装前核对**：查看作者、兼容要求、依赖、权限和签名归档信息，再由桌面端请求安装批准。
+- **作者保管私钥**：使用本地 Ed25519 私钥签名，目录接收公钥、签名元数据和归档并核对完整性。
+- **独立审核**：提交唯一版本、查看实际状态，由另一位审核员携带理由批准或拒绝。
+- **可追溯状态**：举报、撤回和签名密钥撤销均保留不可变版本及审计记录。
+- **目录数据恢复**：检查就绪状态、创建 SQLite 在线快照，在向新目标恢复前校验签名和摘要。
+
+## 快速开始
+
+```powershell
+uv sync --frozen
+uv run python -m community serve
+```
+
+开发服务只监听 `127.0.0.1:8081`。部署前将 `COMMUNITY_DATABASE_PATH` 指向受管理目录，并将 `COMMUNITY_ALLOWED_ORIGINS` 设置为明确的逗号分隔白名单。任何外部可访问实例都需要 TLS、认证控制、限流、监控和备份。
+
+启动后检查 `/health`、`/ready` 和 `/catalog/v1/packages`，再在 OpenNexus 中配置目录地址。需要发布扩展时再创建作者和审核员身份，见[管理命令](#管理命令)。
+
+## 核心工作流
+
+### 1. 查找并安装扩展
+
+在 OpenNexus 中浏览目录，对比已安装和可用版本，核对来源、权限、依赖及兼容要求。桌面端验证下载的扩展后再请求安装批准；发布状态不会授予执行权限。
+
+### 2. 发布并审核签名版本
+
+准备清单和 ZIP，在本地签名规范化发行元数据，再运行 `check-package`。使用作者 Token 提交，由独立审核员身份查看并处理。当前 CLI 命令见[管理命令](#管理命令)。
+
+### 3. 处理更新或事件
+
+更新以新的不可变版本发布。发现问题时携带理由举报，作者或审核员可撤回已发布版本。写请求中断后，先查询提交或发行的当前状态，再决定下一步。签名撤销和发行撤回后，相关归档停止提供下载。
+
+### 4. 备份目录
+
+创建在线快照，将返回的哈希另行保管，并在恢复到新数据库路径前执行验证。核对恢复结果后再切换数据库，见[备份与恢复](#备份与恢复)。
+
+## 系统架构
 
 ```mermaid
 flowchart LR
@@ -88,9 +135,9 @@ stateDiagram-v2
 
 ```mermaid
 erDiagram
-    PRINCIPALS ||--o{ SUBMISSIONS : 发布
-    PRINCIPALS ||--o{ AUDIT : 操作
-    KEYS ||--o{ SUBMISSIONS : 签名
+    PRINCIPALS ||--o{ SUBMISSIONS : authors
+    PRINCIPALS ||--o{ AUDIT : acts
+    KEYS ||--o{ SUBMISSIONS : signs
 
     PRINCIPALS {
         string id PK
@@ -153,15 +200,15 @@ MCP 参数必须是字符串。凭据通过 `secret_environment_keys` 或 `secre
 
 Model 方案需要非空的 `source`、`revision`、`license`、资源对象和验证平台列表。本地 Embedding 运行方案增加 `model_key` 与 `runtime_config`，其中 `embedding_model` 必须与该 key 相同；CPU 线程、内存和超时使用有界整数。桌面在应用设置前核对模型的固定仓库、修订和许可证。安装权重与重建索引仍需用户明确操作。[可执行配置示例](tests/fixtures/community-v1-configurations.json) 与桌面共享，并由 CI 核对；只有元数据的旧方案仍可读取。
 
-## 开发与运行
+## 生态项目
 
-```powershell
-uv sync --frozen
-uv run pytest
-uv run python -m community serve
-```
+| 仓库 | 职责 |
+| --- | --- |
+| [OpenNexus](https://github.com/KiriAky107/OpenNexus) | 本地知识库编辑、AI 工作流与经过审核的扩展安装 |
+| [Sync for OpenNexus](https://github.com/KiriAky107/Sync-for-OpenNexus) | 可选的自托管知识库同步与恢复 |
+| [Community for OpenNexus](https://github.com/KiriAky107/Community-for-OpenNexus) | 独立签名扩展目录与发布审核 |
 
-开发服务只监听 `127.0.0.1:8081`。部署前将 `COMMUNITY_DATABASE_PATH` 指向受管理目录，并将 `COMMUNITY_ALLOWED_ORIGINS` 设置为明确的逗号分隔白名单。任何外部可访问实例都需要 TLS、认证控制、限流、监控和备份。
+服务按需启用、分别部署。Sync 使用 `/sync/v1`，Community 使用 `/catalog/v1`；产品版本和协议版本分别维护。
 
 ## 管理命令
 
@@ -188,7 +235,7 @@ uv run python -m community audit --after 0 --limit 30 --token-file moderator.tok
 
 拒绝审核使用 `--reject`；撤回使用 `withdraw --release-id ID --reason TEXT`，举报使用 `report --release-id ID --reason TEXT`，撤销签名密钥使用 `revoke-key --key-id ID --reason TEXT`。`status --submission-id ID` 返回权限范围内的真实状态。队列支持分页，审计使用游标；举报处理后仍保留原始审计记录。写请求中断时返回退出码 3 和 `OUTCOME_UNKNOWN`，不会自动重发。先查询 `submissions` 或当前状态，再决定后续操作。客户端拒绝重定向；隔离测试的本机 HTTP 地址必须显式添加 `--allow-loopback-http`。
 
-## 就绪检查、备份与恢复
+## 备份与恢复
 
 `/health` 检查进程，`/ready` 检查现有数据库的 schema、访问及写事务可用性，检查不改变记录；不可用时返回 503。[systemd 配置](deployment/opennexus-community.service) 和[环境变量示例](deployment/community.env.example) 使用非特权服务账号、私有数据目录和本机监听地址。将源码安装到 `/opt/opennexus-community`，创建 `opennexus-community` 账号，并将已核对的配置放到 `/etc/opennexus-community.env`。使用系统提供的 Python 3.12 或更新版本执行 `uv sync --frozen --python /usr/bin/python3 --no-managed-python`，避免解释器依赖被服务保护的用户主目录。对外的 TLS 反向代理由部署者配置。
 
@@ -215,11 +262,20 @@ uv run python -m community restore --input-dir C:/private/catalog-backup --outpu
 | `/catalog/v1/moderation/audit`、`/reports/...` | 审核员 | 审计分页、举报及带理由的处理 |
 | `/withdraw`、`/reports`、`/keys/.../revoke` | 相应认证角色 | 事件和生命周期控制 |
 
-## 生产差距
+## 本地开发
+
+```powershell
+uv sync --frozen
+uv run pytest
+```
+
+测试使用临时数据库和示例扩展。作者 Token、签名私钥和生产目录数据保存在检出目录之外。
+
+## 部署说明
 
 当前 Bearer Token 没有到期机制。生产市场仍需要账户登录、Token 轮换与撤销流程、持久限流、更完善的审核治理、可用性监控、滥用处理和 TLS 反向代理。不得将本原型描述为已经上线的生产市场。
 
-## 安全与社区
+## 安全与参与贡献
 
 - 扩展包不得包含密钥、私钥、个人信息、对话历史或用户 Vault 内容。
 - 必须明确许可证；`unknown`、`none`、`unlicensed` 和 `tbd` 会被拒绝。
@@ -228,8 +284,6 @@ uv run python -m community restore --input-dir C:/private/catalog-backup --outpu
 - 贡献遵循[贡献指南](CONTRIBUTING.md)和[社区行为准则](CODE_OF_CONDUCT.md)。
 - 目录缺陷与扩展政策建议使用仓库 Issue 表单。
 
-相关仓库：[OpenNexus](https://github.com/KiriAky107/OpenNexus) 与 [Sync for OpenNexus](https://github.com/KiriAky107/Sync-for-OpenNexus)。
-
-## 许可证
+## 开源协议
 
 本项目采用 [MIT License](LICENSE)。公开扩展包和第三方组件仍适用各自许可证。
