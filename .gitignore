@@ -15,3 +15,4 @@ build/
 /documents/
 /frontend/docs/
 /.contract-desktop/
+/console/node_modules/

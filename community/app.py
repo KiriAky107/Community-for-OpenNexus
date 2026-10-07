@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from .package import Release, inspect, verify
 from .catalog_query import configure_connection, ensure_indexes, page, public
 from .operations import readiness
+from .web import mount_web
 
 
 class CatalogError(Exception):
@@ -111,6 +112,7 @@ class Registry:
 
 def create_app(registry: Registry, source_id="self-hosted", allowed_origins=()):
     app = FastAPI(title="NotesAgent Community", version="1.0.0")
+    mount_web(app)
     app.add_middleware(CORSMiddleware, allow_origins=list(allowed_origins), allow_methods=["GET"], allow_headers=["If-None-Match"], expose_headers=["ETag"])
 
     @app.exception_handler(CatalogError)
@@ -157,7 +159,7 @@ def create_app(registry: Registry, source_id="self-hosted", allowed_origins=()):
     def source():
         with registry.connect(write=False) as conn:
             keys = [{"key_id": x["id"], "namespace": x["namespace"], "public_key": base64.b64encode(x["public_key"]).decode(), "revoked": bool(x["revoked"])} for x in conn.execute("SELECT * FROM keys")]
-        return {"schema_version": 1, "source_id": source_id, "keys": keys}
+        return JSONResponse({"schema_version": 1, "source_id": source_id, "keys": keys}, headers={'Cache-Control': 'no-store'})
 
     @app.get("/catalog/v1/packages")
     def packages(q: str = Query(default="", max_length=120), type: Literal["theme", "skill", "plugin", "mcp", "persona", "template", "model"] | None = None,

@@ -22,6 +22,8 @@
 
 当前版本： [v0.6.0](https://github.com/KiriAky107/Community-for-OpenNexus/releases/tag/v0.6.0)。
 
+当前开发新增 `/` 网页目录，支持可分享的包详情、版本记录、搜索和类型筛选。浏览器在读取归档前重新确认发行与签名公钥状态，核对大小和 SHA-256 后提供明确的保存链接。离线元数据会标明状态，下载须重新连接确认。
+
 ## 0.6.0 更新
 
 - 目录在数据库查询层过滤、计数和分页，版本按语义版本排序，并提供查询一致的 ETag。
@@ -48,13 +50,15 @@ uv run python -m community serve
 
 开发服务只监听 `127.0.0.1:8081`。部署前将 `COMMUNITY_DATABASE_PATH` 指向受管理目录，并将 `COMMUNITY_ALLOWED_ORIGINS` 设置为明确的逗号分隔白名单。任何外部可访问实例都需要 TLS、认证控制、限流、监控和备份。
 
-启动后检查 `/health`、`/ready` 和 `/catalog/v1/packages`，再在 OpenNexus 中配置目录地址。需要发布扩展时再创建作者和审核员身份，见[管理命令](#管理命令)。
+打开 `http://127.0.0.1:8081/` 浏览网页目录。仓库中已构建的网页由同一服务进程提供，运行时无需 Node.js 进程。检查 `/health`、`/ready` 和 `/catalog/v1/packages`，再在 OpenNexus 中配置目录地址。需要发布扩展时再创建作者和审核员身份，见[管理命令](#管理命令)。
 
 ## 核心工作流
 
 ### 1. 查找并安装扩展
 
-在 OpenNexus 中浏览目录，对比已安装和可用版本，核对来源、权限、依赖及兼容要求。桌面端验证下载的扩展后再请求安装批准；发布状态不会授予执行权限。
+在网页按名称或描述搜索、选择类型并打开发行。通过 `/packages/{namespace}/{package_id}?version={version}` 分享指定版本，查看作者、许可、兼容范围、依赖、权限和原始更新说明。点击“下载归档”，大小与哈希核对后再点击“保存已校验 ZIP”。发行撤回、公钥撤销或缺失会禁用下载；公钥状态独立于目录 ETag 重新读取。缓存仅保存本次浏览器会话中相同查询的结果，并显示最后确认时间。
+
+在 OpenNexus 中对比已安装和可用版本后再安装。桌面端验证扩展的密码学签名并请求安装批准；网页的哈希核对不会授予执行权限。
 
 ### 2. 发布并审核签名版本
 
@@ -251,6 +255,7 @@ uv run python -m community restore --input-dir C:/private/catalog-backup --outpu
 
 | 路由 | 访问级别 | 用途 |
 | --- | --- | --- |
+| `/`、`/packages/{namespace}/{package_id}` | 公开 | 网页目录与可分享版本详情 |
 | `/health` | 公开 | 进程健康 |
 | `/ready` | 公开 | 数据库就绪检查 |
 | `/catalog/v1/sources` | 公开 | 来源身份和公钥 |
@@ -268,6 +273,18 @@ uv run python -m community restore --input-dir C:/private/catalog-backup --outpu
 uv sync --frozen
 uv run pytest
 ```
+
+重新构建网页资源需要 Node.js 22+ 和 pnpm 10.28.0，在源码检出目录运行：
+
+```powershell
+cd console
+pnpm install --frozen-lockfile
+pnpm test
+pnpm build
+cd ..
+```
+
+构建输出到 `community/static/`。开发网页时，在 `127.0.0.1:18965` 运行隔离 API，再在 `console/` 执行 `pnpm dev`；Vite 只将 `/catalog` 代理到该实例。生产网页及静态资源使用同源内容策略，禁用内联脚本，并设置 `no-store` 和 `nosniff` 响应头。
 
 测试使用临时数据库和示例扩展。作者 Token、签名私钥和生产目录数据保存在检出目录之外。
 

@@ -22,6 +22,8 @@
 
 Current release: [v0.6.0](https://github.com/KiriAky107/Community-for-OpenNexus/releases/tag/v0.6.0).
 
+Current development adds a public web catalog at `/`, with shareable package details, version history, search and type filters. The browser rechecks release and signing-key state before fetching an archive, validates its size and SHA-256, and provides an explicit save link. Offline metadata is labeled and cannot authorize a download.
+
 ## What’s New in 0.6.0
 
 - Filter, count and paginate catalogs in database queries, with semantic version ordering and query-specific ETags.
@@ -48,13 +50,15 @@ uv run python -m community serve
 
 The development server binds to `127.0.0.1:8081`. Configure `COMMUNITY_DATABASE_PATH` to a managed location and `COMMUNITY_ALLOWED_ORIGINS` to an explicit comma-separated allowlist before deployment. Put any externally reachable instance behind TLS, authentication controls, rate limiting, monitoring, and backups.
 
-After starting the service, check `/health`, `/ready` and `/catalog/v1/packages`. Configure OpenNexus to use the catalog URL. Create author and moderator identities only if you need to publish; see [Administration](#administration).
+Open `http://127.0.0.1:8081/` to browse the web catalog. The checked-in web build is served by the same process; no Node.js process is needed at runtime. Check `/health`, `/ready` and `/catalog/v1/packages`, then configure OpenNexus to use the catalog URL. Create author and moderator identities only if you need to publish; see [Administration](#administration).
 
 ## Core Workflows
 
 ### 1. Find and install a package
 
-Browse the catalog in OpenNexus, compare the installed and available versions, then inspect source, permissions, dependencies and compatibility. The desktop verifies the downloaded package and asks for installation approval; publication does not grant execution permissions.
+Search the website by name or description, choose a package type, and open a release. Share `/packages/{namespace}/{package_id}?version={version}` to link directly to that version. Review its author, license, compatibility, dependencies, permissions and original changelog. Choose **Download archive**, then **Save verified ZIP** after the size and hash check. Withdrawn releases and revoked or missing signing keys disable downloads; signing-key status is refreshed independently of catalog ETags. Cached results are limited to matching queries in the current browser session and show their last confirmation time.
+
+In OpenNexus, compare installed and available versions before installation. The desktop verifies the package's cryptographic signature and asks for installation approval; the website's hash check does not grant execution permissions.
 
 ### 2. Publish and review a signed version
 
@@ -252,6 +256,7 @@ Backups use SQLite's online snapshot API, including committed WAL data. The comp
 
 | Route group | Access | Purpose |
 | --- | --- | --- |
+| `/`, `/packages/{namespace}/{package_id}` | Public | Web catalog and shareable version details |
 | `/health` | Public | Process health |
 | `/ready` | Public | Database readiness |
 | `/catalog/v1/sources` | Public | Source identity and public keys |
@@ -269,6 +274,18 @@ Backups use SQLite's online snapshot API, including committed WAL data. The comp
 uv sync --frozen
 uv run pytest
 ```
+
+To rebuild the web assets, use Node.js 22+ and pnpm 10.28.0 in a source checkout:
+
+```powershell
+cd console
+pnpm install --frozen-lockfile
+pnpm test
+pnpm build
+cd ..
+```
+
+The build writes `community/static/`. For web development, run the isolated API on `127.0.0.1:18965` and use `pnpm dev` inside `console/`; the Vite proxy forwards only `/catalog` to that instance. The production web shell and assets use a same-origin content policy without inline scripts, plus `no-store` and `nosniff` headers.
 
 Use temporary databases and synthetic package fixtures for tests. Keep author tokens, private signing keys and production catalogs outside the checkout.
 
