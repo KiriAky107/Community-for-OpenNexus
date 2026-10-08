@@ -248,6 +248,12 @@ Set `COMMUNITY_WEB_ORIGIN` to the exact public HTTPS origin, such as `https://co
 
 `GET /catalog/v1/web/sessions` lists only the current identity's active sessions. `POST /catalog/v1/web/sessions/{session_id}/revoke` removes an owned session; repeat revocation is safe. `POST /catalog/v1/web/session/logout` removes the current session and clears its cookie. Keep tokens and CSRF proofs out of URLs and browser storage. These routes provide the session API; the public catalog remains usable without login.
 
+Authors can send signed metadata and the Base64 ZIP to `POST /catalog/v1/publish/preflight` before committing a submission. It checks ownership, the current signing key, signature, actual archive bytes and immutable version without writing a submission or audit entry. The response includes a `review_digest`. Authorized `GET /catalog/v1/publish/submissions/{id}/inspection?offset=0&limit=100` returns actual file sizes and hashes, the manifest, permissions and dependencies, decisions and changes from the preceding published version. File and change lists are paged; a manifest preview beyond 64 KiB is explicitly marked as truncated. The authorized `/archive` route downloads the original ZIP for full inspection without executing it.
+
+Cookie-authenticated mutations require a fresh 32-character lowercase hexadecimal `operation_id`. Submission, review, withdrawal and report resolution also require `expected_sha256`: the reviewed release digest, or the report's `review_digest` from the report queue. An outdated digest refuses the action. The server rechecks the signer and archive on approval and forbids self-review. Authors can read their rejection and withdrawal reasons through submission status.
+
+After an interrupted write, read `GET /catalog/v1/web/operations/{operation_id}`. It returns only the current identity's immutable receipt or `state: "not_found"`. A confirmed receipt keeps its original result; an explicit retry with the same ID and exact payload cannot append another submission, decision or report. Reusing an ID for a different intent is refused. When the receipt is absent, review the original intent before explicitly resending it. Bearer clients may also supply these operation fields; existing CLI commands retain their explicit, unretried behavior.
+
 For an isolated HTTP demonstration, set `COMMUNITY_WEB_ORIGIN=http://127.0.0.1:8081` and run `uv run python -m community serve --allow-insecure-loopback-sessions`. The exception accepts only a loopback origin and listener. Public deployments use HTTPS and the default secure cookie policy.
 
 ## Backup and Recovery
@@ -264,6 +270,8 @@ Backups use SQLite's online snapshot API, including committed WAL data. The comp
 
 The owned backup snapshot excludes short-lived browser sessions, without signing users out of the running source service. Verification refuses a backup containing active session rows. After restoration, browser users log in again; original principal tokens and signed package history remain intact. Backups made before the session table existed still verify and restore, and starting the service adds the empty table.
 
+Immutable action receipts remain in the audit history and are checked during backup verification. Recovery retains their original IDs and outcomes, so retrying an already confirmed operation against the restored catalog returns its receipt.
+
 ## API Overview
 
 | Route group | Access | Purpose |
@@ -275,6 +283,9 @@ The owned backup snapshot excludes short-lived browser sessions, without signing
 | `/catalog/v1/packages` | Public | Searchable, paginated catalog with ETag |
 | `/catalog/v1/releases/.../archive` | Public if active | Package archive download |
 | `/catalog/v1/web/session`, `/web/sessions/...` | Same-origin author or moderator | Expiring browser session, owned revocation and logout |
+| `/catalog/v1/web/operations/{operation_id}` | Current identity | Read-only reconciliation of an immutable action receipt |
+| `/catalog/v1/publish/preflight` | Author | Read-only signed archive and version checks |
+| `/catalog/v1/publish/submissions/.../inspection`, `/archive` | Owner or moderator | Paged file and version inspection, original ZIP |
 | `/catalog/v1/publish/submissions` | Author | Immutable namespace publication |
 | `/catalog/v1/moderation/reviews` | Moderator | Independent review queue and decision |
 | `/catalog/v1/publish/submissions/...` | Owner or moderator | Publication state and reply recovery |

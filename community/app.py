@@ -16,11 +16,12 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .package import Release, inspect, verify
+from .package import Release
 from .catalog_query import configure_connection, ensure_indexes, page, public
 from .operations import readiness
 from .web import mount_web
 from .sessions import BrowserSessions, SessionError, SESSION_SCHEMA
+from .workbench import details, digest, inspection, receipt, release_digest
 
 
 class CatalogError(Exception):
@@ -28,14 +29,18 @@ class CatalogError(Exception):
         self.status, self.code = status, code
 
 
-class Submission(BaseModel):
+class Intent(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    operation_id: str | None = Field(default=None, pattern=r'^[a-f0-9]{32}$')
+    expected_sha256: str | None = Field(default=None, pattern=r'^[a-f0-9]{64}$')
+
+
+class Submission(Intent):
     release: Release
     archive_base64: str = Field(max_length=14 * 1024 * 1024)
 
 
-class Review(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class Review(Intent):
     submission_id: str
     approve: bool
     reason: str = Field(min_length=1, max_length=2000)
@@ -47,8 +52,7 @@ class Review(BaseModel):
         return value
 
 
-class Reason(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class Reason(Intent):
     reason: str = Field(min_length=1, max_length=2000)
 
     @field_validator('reason')
@@ -83,6 +87,7 @@ class Registry:
             ensure_indexes(conn)
             conn.execute("CREATE INDEX IF NOT EXISTS moderation_pending ON submissions(id) WHERE state='pending'")
             conn.execute('CREATE INDEX IF NOT EXISTS audit_action_subject ON audit(action,subject,id)')
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS web_operation_actor_id ON audit(actor,subject) WHERE action='web-operation'")
 
     @contextmanager
     def connect(self, *, write=True):
@@ -164,6 +169,79 @@ def create_app(registry: Registry, source_id="self-hosted", allowed_origins=(), 
     def audit(conn, actor, action, subject, reason=""):
         return conn.execute("INSERT INTO audit(actor,action,subject,reason,timestamp) VALUES (?,?,?,?,?)", (actor, action, subject, reason, int(time.time()))).lastrowid
 
+    def operation(conn, request, actor, body, kind, target, apply):
+        if sessions.cookie in request.cookies and not body.operation_id:
+            raise CatalogError(422, 'OPERATION_ID_REQUIRED')
+        if not body.operation_id: return apply()
+        fingerprint = digest({'kind': kind, 'target': target, 'body': body.model_dump()})
+        stored = conn.execute("SELECT subject,reason FROM audit WHERE actor=? AND action='web-operation' AND subject=?", (actor['id'], body.operation_id)).fetchone()
+        if stored:
+            try: saved = receipt(stored)
+            except (ValueError, TypeError, KeyError): raise CatalogError(503, 'OPERATION_RECEIPT_INVALID') from None
+            if saved['fingerprint'] != fingerprint: raise CatalogError(409, 'OPERATION_ID_REUSED')
+            return saved['result']
+        result = {**apply(), 'schema_version': 1, 'operation_id': body.operation_id, 'kind': kind, 'target': target, 'confirmed_at': int(time.time())}
+        audit(conn, actor['id'], 'web-operation', body.operation_id, json.dumps({'schema_version': 1, 'kind': kind, 'fingerprint': fingerprint, 'result': result}, ensure_ascii=False, separators=(',', ':')))
+        return result
+
+    def expected(request, body, value):
+        if sessions.cookie in request.cookies and not body.expected_sha256:
+            raise CatalogError(422, 'REVIEW_DIGEST_REQUIRED')
+        if body.expected_sha256 is not None and body.expected_sha256 != value:
+            raise CatalogError(409, 'REVIEW_CHANGED')
+
+    def check_submission(conn, actor, body):
+        release = body.release
+        if actor['namespace'] != release.namespace or actor['id'] != release.author_id: raise CatalogError(403, 'NAMESPACE_OWNERSHIP')
+        key = conn.execute('SELECT * FROM keys WHERE id=? AND namespace=? AND revoked=0', (release.key_id, release.namespace)).fetchone()
+        if not key: raise CatalogError(403, 'UNTRUSTED_SIGNER')
+        try:
+            blob = base64.b64decode(body.archive_base64, validate=True)
+            checked = inspection(conn, release, blob)
+        except Exception:
+            raise CatalogError(422, 'PACKAGE_VALIDATION_FAILED') from None
+        if conn.execute('SELECT 1 FROM submissions WHERE namespace=? AND package_id=? AND version=?', (release.namespace, release.package_id, release.version)).fetchone():
+            raise CatalogError(409, 'IMMUTABLE_VERSION')
+        return blob, checked
+
+    @app.get('/catalog/v1/web/operations/{operation_id}')
+    def operation_status(operation_id: str, request: Request, authorization: str = Header(default='')):
+        if len(operation_id) != 32 or any(value not in 'abcdef0123456789' for value in operation_id): raise CatalogError(404, 'OPERATION_NOT_FOUND')
+        with registry.connect(write=False) as conn:
+            actor = principal(conn, request, authorization)
+            item = conn.execute("SELECT subject,reason FROM audit WHERE actor=? AND action='web-operation' AND subject=?", (actor['id'], operation_id)).fetchone()
+            if not item: return {'schema_version': 1, 'operation_id': operation_id, 'state': 'not_found'}
+            try: return receipt(item)['result']
+            except (ValueError, TypeError, KeyError): raise CatalogError(503, 'OPERATION_RECEIPT_INVALID') from None
+
+    @app.post('/catalog/v1/publish/preflight')
+    def preflight(request: Request, body: Submission, authorization: str = Header(default='')):
+        with registry.connect(write=False) as conn:
+            actor = principal(conn, request, authorization, 'author')
+            _blob, checked = check_submission(conn, actor, body)
+            files = checked.pop('file_list')
+            checked['file_page'] = {'total': len(files), 'offset': 0, 'limit': 100, 'items': files[:100]}
+            return {'schema_version': 1, 'state': 'validated', 'release': body.release.model_dump(), 'inspection': checked}
+
+    @app.get('/catalog/v1/publish/submissions/{submission_id}/inspection')
+    def submission_inspection(submission_id: str, request: Request, offset: int = Query(default=0, ge=0, le=2147483647), limit: int = Query(default=100, ge=1, le=100), authorization: str = Header(default='')):
+        with registry.connect(write=False) as conn:
+            actor = principal(conn, request, authorization)
+            item = conn.execute('SELECT * FROM submissions WHERE id=?', (submission_id,)).fetchone()
+            if not item: raise CatalogError(404, 'SUBMISSION_NOT_FOUND')
+            if actor['role'] != 'moderator' and actor['id'] != item['author_id']: raise CatalogError(403, 'OWNERSHIP_REQUIRED')
+            try: return details(conn, item, offset=offset, limit=limit)
+            except Exception: raise CatalogError(422, 'PACKAGE_VALIDATION_FAILED') from None
+
+    @app.get('/catalog/v1/publish/submissions/{submission_id}/archive')
+    def submission_archive(submission_id: str, request: Request, authorization: str = Header(default='')):
+        with registry.connect(write=False) as conn:
+            actor = principal(conn, request, authorization)
+            item = conn.execute('SELECT author_id,blob FROM submissions WHERE id=?', (submission_id,)).fetchone()
+            if not item: raise CatalogError(404, 'SUBMISSION_NOT_FOUND')
+            if actor['role'] != 'moderator' and actor['id'] != item['author_id']: raise CatalogError(403, 'OWNERSHIP_REQUIRED')
+            return Response(item['blob'], media_type='application/zip', headers={'Cache-Control': 'private, no-store', 'Content-Disposition': 'attachment; filename="review-package.zip"'})
+
     @app.get("/health")
     def health(): return {"status": "ok"}
 
@@ -217,22 +295,15 @@ def create_app(registry: Registry, source_id="self-hosted", allowed_origins=(), 
     def submit(request: Request, body: Submission, authorization: str = Header(default="")):
         with registry.connect() as conn:
             actor = principal(conn, request, authorization, "author")
-            release = body.release
-            if actor["namespace"] != release.namespace or actor["id"] != release.author_id: raise CatalogError(403, "NAMESPACE_OWNERSHIP")
-            key = conn.execute("SELECT * FROM keys WHERE id=? AND namespace=? AND revoked=0", (release.key_id, release.namespace)).fetchone()
-            if not key: raise CatalogError(403, "UNTRUSTED_SIGNER")
-            try:
-                verify(release, key["public_key"])
-                blob = base64.b64decode(body.archive_base64, validate=True)
-                inspect(release, blob)
-            except Exception:
-                raise CatalogError(422, "PACKAGE_VALIDATION_FAILED") from None
-            if conn.execute("SELECT 1 FROM submissions WHERE namespace=? AND package_id=? AND version=?", (release.namespace, release.package_id, release.version)).fetchone():
-                raise CatalogError(409, "IMMUTABLE_VERSION")
-            submission_id = secrets.token_hex(16)
-            conn.execute("INSERT INTO submissions VALUES (?,?,?,?,?,?,?,'pending')", (submission_id, release.namespace, release.package_id, release.version, release.model_dump_json(), blob, actor["id"]))
-            audit(conn, actor["id"], "submit", submission_id)
-            return {"submission_id": submission_id, "state": "pending"}
+            def apply():
+                release = body.release
+                blob, _checked = check_submission(conn, actor, body)
+                expected(request, body, release_digest(release))
+                submission_id = secrets.token_hex(16)
+                conn.execute("INSERT INTO submissions VALUES (?,?,?,?,?,?,?,'pending')", (submission_id, release.namespace, release.package_id, release.version, release.model_dump_json(), blob, actor["id"]))
+                audit(conn, actor['id'], 'submit', submission_id)
+                return {'submission_id': submission_id, 'state': 'pending', 'review_digest': release_digest(release)}
+            return operation(conn, request, actor, body, 'submit', '/'.join((body.release.namespace, body.release.package_id, body.release.version)), apply)
 
     @app.get("/catalog/v1/moderation/reviews")
     def pending(request: Request, offset: int = Query(default=0, ge=0, le=2147483647), limit: int = Query(default=30, ge=1, le=100), authorization: str = Header(default="")):
@@ -249,7 +320,8 @@ def create_app(registry: Registry, source_id="self-hosted", allowed_origins=(), 
             item = conn.execute('SELECT id,metadata,author_id,state FROM submissions WHERE id=?', (submission_id,)).fetchone()
             if not item: raise CatalogError(404, 'SUBMISSION_NOT_FOUND')
             if actor['role'] != 'moderator' and actor['id'] != item['author_id']: raise CatalogError(403, 'OWNERSHIP_REQUIRED')
-            return {'schema_version': 1, 'submission_id': item['id'], 'state': item['state'], 'release': json.loads(item['metadata'])}
+            decisions = [dict(row) for row in conn.execute("SELECT id,actor,action,reason,timestamp FROM audit WHERE subject=? AND action IN ('published','rejected','withdraw') ORDER BY id DESC LIMIT 20", (item['id'],))]
+            return {'schema_version': 1, 'submission_id': item['id'], 'state': item['state'], 'release': json.loads(item['metadata']), 'decisions': decisions}
 
     @app.get('/catalog/v1/publish/submissions')
     def own_submissions(request: Request, package_id: str | None = Query(default=None, max_length=64), version: str | None = Query(default=None, max_length=120), offset: int = Query(default=0, ge=0, le=2147483647), limit: int = Query(default=30, ge=1, le=100), authorization: str = Header(default='')):
@@ -276,61 +348,79 @@ def create_app(registry: Registry, source_id="self-hosted", allowed_origins=(), 
         with registry.connect(write=False) as conn:
             principal(conn, request, authorization, 'moderator')
             rows = conn.execute("SELECT id,actor,subject AS release_id,reason,timestamp FROM audit AS report WHERE action='report' AND id>? AND NOT EXISTS (SELECT 1 FROM audit AS resolution WHERE resolution.action='resolve-report' AND resolution.subject=CAST(report.id AS TEXT)) ORDER BY id LIMIT ?", (after, limit + 1)).fetchall()
-            return {'schema_version': 1, 'items': [dict(row) for row in rows[:limit]], 'next_cursor': rows[limit - 1]['id'] if len(rows) > limit else None}
+            return {'schema_version': 1, 'items': [{**dict(row), 'review_digest': digest(dict(row))} for row in rows[:limit]], 'next_cursor': rows[limit - 1]['id'] if len(rows) > limit else None}
 
     @app.post('/catalog/v1/moderation/reports/{report_id}/resolve')
     def resolve_report(report_id: int, request: Request, body: ReportResolution, authorization: str = Header(default='')):
         with registry.connect() as conn:
             actor = principal(conn, request, authorization, 'moderator')
-            if not conn.execute("SELECT 1 FROM audit WHERE id=? AND action='report'", (report_id,)).fetchone(): raise CatalogError(404, 'REPORT_NOT_FOUND')
-            if conn.execute("SELECT 1 FROM audit WHERE action='resolve-report' AND subject=?", (str(report_id),)).fetchone(): raise CatalogError(409, 'REPORT_ALREADY_RESOLVED')
-            audit(conn, actor['id'], 'resolve-report', str(report_id), body.model_dump_json())
-            return {'state': 'resolved', 'report_id': report_id, 'decision': body.decision}
+            def apply():
+                report = conn.execute("SELECT id,actor,subject AS release_id,reason,timestamp FROM audit WHERE id=? AND action='report'", (report_id,)).fetchone()
+                if not report: raise CatalogError(404, 'REPORT_NOT_FOUND')
+                expected(request, body, digest(dict(report)))
+                if conn.execute("SELECT 1 FROM audit WHERE action='resolve-report' AND subject=?", (str(report_id),)).fetchone(): raise CatalogError(409, 'REPORT_ALREADY_RESOLVED')
+                audit(conn, actor['id'], 'resolve-report', str(report_id), body.model_dump_json(exclude={'operation_id', 'expected_sha256'}))
+                return {'state': 'resolved', 'report_id': report_id, 'decision': body.decision}
+            return operation(conn, request, actor, body, 'resolve-report', str(report_id), apply)
 
     @app.post("/catalog/v1/moderation/reviews")
     def review(request: Request, body: Review, authorization: str = Header(default="")):
         with registry.connect() as conn:
             actor = principal(conn, request, authorization, "moderator")
-            item = conn.execute("SELECT * FROM submissions WHERE id=?", (body.submission_id,)).fetchone()
-            if not item: raise CatalogError(404, "SUBMISSION_NOT_FOUND")
-            if item["author_id"] == actor["id"]: raise CatalogError(403, "SELF_REVIEW_FORBIDDEN")
-            if item["state"] != "pending": raise CatalogError(409, "REVIEW_ALREADY_CLOSED")
-            try: release = Release.model_validate_json(item["metadata"])
-            except ValueError: raise CatalogError(422, "INVALID_RELEASE_METADATA") from None
-            key = conn.execute("SELECT * FROM keys WHERE id=? AND revoked=0", (release.key_id,)).fetchone()
-            if body.approve and not key: raise CatalogError(403, "UNTRUSTED_SIGNER")
-            state = "published" if body.approve else "rejected"
-            conn.execute("UPDATE submissions SET state=? WHERE id=?", (state, body.submission_id))
-            audit(conn, actor["id"], state, body.submission_id, body.reason)
-            return {"state": state}
+            def apply():
+                item = conn.execute('SELECT * FROM submissions WHERE id=?', (body.submission_id,)).fetchone()
+                if not item: raise CatalogError(404, 'SUBMISSION_NOT_FOUND')
+                if item['author_id'] == actor['id']: raise CatalogError(403, 'SELF_REVIEW_FORBIDDEN')
+                if item['state'] != 'pending': raise CatalogError(409, 'REVIEW_ALREADY_CLOSED')
+                try: release = Release.model_validate_json(item['metadata'])
+                except ValueError: raise CatalogError(422, 'INVALID_RELEASE_METADATA') from None
+                expected(request, body, release_digest(release))
+                key = conn.execute('SELECT * FROM keys WHERE id=? AND namespace=? AND revoked=0', (release.key_id, release.namespace)).fetchone()
+                if body.approve and not key: raise CatalogError(403, 'UNTRUSTED_SIGNER')
+                if body.approve:
+                    try: inspection(conn, release, item['blob'])
+                    except Exception: raise CatalogError(422, 'PACKAGE_VALIDATION_FAILED') from None
+                state = 'published' if body.approve else 'rejected'
+                conn.execute('UPDATE submissions SET state=? WHERE id=?', (state, body.submission_id))
+                audit(conn, actor['id'], state, body.submission_id, body.reason)
+                return {'state': state, 'submission_id': body.submission_id, 'review_digest': release_digest(release)}
+            return operation(conn, request, actor, body, 'review', body.submission_id, apply)
 
     @app.post("/catalog/v1/releases/{release_id}/withdraw")
     def withdraw(release_id: str, request: Request, body: Reason, authorization: str = Header(default="")):
         with registry.connect() as conn:
             actor = principal(conn, request, authorization)
-            item = conn.execute("SELECT * FROM submissions WHERE id=?", (release_id,)).fetchone()
-            if not item: raise CatalogError(404, "RELEASE_NOT_FOUND")
-            if actor["role"] != "moderator" and actor["id"] != item["author_id"]: raise CatalogError(403, "OWNERSHIP_REQUIRED")
-            if item["state"] not in {"published", "withdrawn"}: raise CatalogError(409, "RELEASE_NOT_PUBLISHED")
-            conn.execute("UPDATE submissions SET state='withdrawn' WHERE id=?", (release_id,))
-            audit(conn, actor["id"], "withdraw", release_id, body.reason)
-            return {"state": "withdrawn"}
+            def apply():
+                item = conn.execute('SELECT * FROM submissions WHERE id=?', (release_id,)).fetchone()
+                if not item: raise CatalogError(404, 'RELEASE_NOT_FOUND')
+                if actor['role'] != 'moderator' and actor['id'] != item['author_id']: raise CatalogError(403, 'OWNERSHIP_REQUIRED')
+                if item['state'] not in {'published', 'withdrawn'}: raise CatalogError(409, 'RELEASE_NOT_PUBLISHED')
+                expected(request, body, digest(json.loads(item['metadata'])))
+                if body.operation_id and item['state'] == 'withdrawn': raise CatalogError(409, 'RELEASE_ALREADY_WITHDRAWN')
+                conn.execute("UPDATE submissions SET state='withdrawn' WHERE id=?", (release_id,))
+                audit(conn, actor['id'], 'withdraw', release_id, body.reason)
+                return {'state': 'withdrawn', 'release_id': release_id}
+            return operation(conn, request, actor, body, 'withdraw', release_id, apply)
 
     @app.post("/catalog/v1/releases/{release_id}/reports")
     def report(release_id: str, request: Request, body: Reason, authorization: str = Header(default="")):
         with registry.connect() as conn:
             actor = principal(conn, request, authorization)
-            if not conn.execute("SELECT 1 FROM submissions WHERE id=?", (release_id,)).fetchone(): raise CatalogError(404, "RELEASE_NOT_FOUND")
-            report_id = audit(conn, actor["id"], "report", release_id, body.reason)
-            return {"state": "reported", 'report_id': report_id}
+            def apply():
+                if not conn.execute('SELECT 1 FROM submissions WHERE id=?', (release_id,)).fetchone(): raise CatalogError(404, 'RELEASE_NOT_FOUND')
+                report_id = audit(conn, actor['id'], 'report', release_id, body.reason)
+                return {'state': 'reported', 'report_id': report_id, 'release_id': release_id}
+            return operation(conn, request, actor, body, 'report', release_id, apply)
 
     @app.post("/catalog/v1/keys/{key_id}/revoke")
     def revoke(key_id: str, request: Request, body: Reason, authorization: str = Header(default="")):
         with registry.connect() as conn:
             actor = principal(conn, request, authorization, "moderator")
-            if not conn.execute('SELECT 1 FROM keys WHERE id=?', (key_id,)).fetchone(): raise CatalogError(404, 'KEY_NOT_FOUND')
-            conn.execute("UPDATE keys SET revoked=1 WHERE id=?", (key_id,))
-            audit(conn, actor["id"], "revoke-key", key_id, body.reason)
-            return {"state": "revoked"}
+            def apply():
+                if not conn.execute('SELECT 1 FROM keys WHERE id=?', (key_id,)).fetchone(): raise CatalogError(404, 'KEY_NOT_FOUND')
+                conn.execute('UPDATE keys SET revoked=1 WHERE id=?', (key_id,))
+                audit(conn, actor['id'], 'revoke-key', key_id, body.reason)
+                return {'state': 'revoked', 'key_id': key_id}
+            return operation(conn, request, actor, body, 'revoke-key', key_id, apply)
 
     return app

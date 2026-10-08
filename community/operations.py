@@ -14,6 +14,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from .package import Release
 from .sessions import SESSION_COLUMNS
+from .workbench import receipt
 
 TABLES = {
     'schema_version': ('version',),
@@ -98,6 +99,9 @@ def inspect_database(path):
             raise OperationError('DATABASE_INTEGRITY_FAILED')
         if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='web_sessions'").fetchone() and conn.execute('SELECT 1 FROM web_sessions LIMIT 1').fetchone():
             raise OperationError('BACKUP_CONTAINS_BROWSER_SESSIONS')
+        for item in conn.execute("SELECT subject,reason FROM audit WHERE action='web-operation'"):
+            try: receipt(item)
+            except (ValueError, TypeError, KeyError): raise OperationError('DATABASE_OPERATION_RECEIPT_INVALID') from None
         counts = {name: conn.execute(f'SELECT COUNT(*) FROM {name}').fetchone()[0] for name in TABLES if name != 'schema_version'}
         for key in conn.execute('SELECT id,namespace,public_key,revoked FROM keys'):
             if not isinstance(key['public_key'], bytes) or len(key['public_key']) != 32 or key['revoked'] not in (0, 1):

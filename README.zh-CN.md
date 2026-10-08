@@ -247,6 +247,12 @@ uv run python -m community audit --after 0 --limit 30 --token-file moderator.tok
 
 `GET /catalog/v1/web/sessions` 只列出当前身份的有效会话；`POST /catalog/v1/web/sessions/{session_id}/revoke` 撤销自己的会话，重复撤销不会重复产生作用。`POST /catalog/v1/web/session/logout` 移除当前会话并清空 Cookie。Token 和 CSRF 证明不得进入 URL 或浏览器存储。这些路由提供会话 API，公开目录仍可免登录浏览。
 
+作者提交前可将已签名元数据和 Base64 ZIP 发到 `POST /catalog/v1/publish/preflight`。预检核对归属、当前签名密钥、签名、实际归档字节及不可变版本，不写入提交或审计，响应包含 `review_digest`。有权限的 `GET /catalog/v1/publish/submissions/{id}/inspection?offset=0&limit=100` 返回实际文件大小和哈希、清单、权限与依赖、决定及与前一已发布版本的变化。文件和变化列表支持分页，超过 64 KiB 的清单预览明确标记为已截断。相应的 `/archive` 路由下载原始 ZIP，供完整检查，不执行包内代码。
+
+Cookie 写请求必须携带新的 32 位小写十六进制 `operation_id`。提交、审核、撤回和举报处理还须提供 `expected_sha256`，其值是已核对的发行摘要，或举报队列中该举报的 `review_digest`。摘要过期时拒绝动作；批准时重新核对签名密钥和归档，并禁止自审。作者通过提交状态查看拒绝及撤回原因。
+
+写请求中断后，读取 `GET /catalog/v1/web/operations/{operation_id}`，只返回当前身份的不可变回执或 `state: "not_found"`。已确认回执保留原结果；用相同编号和完全相同内容显式重试，不会增加另一条提交、审核或举报。将原编号用于不同意图会被拒绝。回执不存在时，先核对原意图，再决定是否显式重发。Bearer 客户端也可携带这些操作字段，现有 CLI 命令保留显式执行且不自动重试的行为。
+
 隔离 HTTP 演示可设置 `COMMUNITY_WEB_ORIGIN=http://127.0.0.1:8081`，再运行 `uv run python -m community serve --allow-insecure-loopback-sessions`；该例外只接受本机来源和监听地址。公开部署使用 HTTPS 和默认的安全 Cookie 策略。
 
 ## 备份与恢复
@@ -263,6 +269,8 @@ uv run python -m community restore --input-dir C:/private/catalog-backup --outpu
 
 本次拥有的备份快照会移除短期网页会话，不会让原服务中的用户退出。校验拒绝含有效会话记录的备份。恢复后网页用户需要重新登录，原身份 Token 和签名包历史保留。旧版没有会话表的备份仍可校验与恢复，启动服务时增加空表。
 
+不可变操作回执保留在审计历史中，备份校验会检查其格式。恢复保留原编号和结果，在恢复后的目录重试已确认的动作仍返回原回执。
+
 ## API 概览
 
 | 路由 | 访问级别 | 用途 |
@@ -274,6 +282,9 @@ uv run python -m community restore --input-dir C:/private/catalog-backup --outpu
 | `/catalog/v1/packages` | 公开 | 支持 ETag 的搜索和分页目录 |
 | `/catalog/v1/releases/.../archive` | 有效发行公开 | 下载扩展压缩包 |
 | `/catalog/v1/web/session`、`/web/sessions/...` | 同源作者或审核员 | 有效期内的网页会话、自己的会话撤销与退出 |
+| `/catalog/v1/web/operations/{operation_id}` | 当前身份 | 只读核对不可变操作回执 |
+| `/catalog/v1/publish/preflight` | 作者 | 只读核对签名归档和版本 |
+| `/catalog/v1/publish/submissions/.../inspection`、`/archive` | 所有者或审核员 | 文件和版本变化分页检查、原始 ZIP |
 | `/catalog/v1/publish/submissions` | 作者 | 命名空间内不可变发布 |
 | `/catalog/v1/moderation/reviews` | 审核员 | 独立审核队列和决定 |
 | `/catalog/v1/publish/submissions/...` | 所有者或审核员 | 发布状态和丢失回执核对 |

@@ -41,6 +41,13 @@ def writes(session):
     return {**WRITE, 'X-Community-CSRF': session['csrf']}
 
 
+def reviewed_submission(client, session, key):
+    data = package(key)
+    preview = client.post('/catalog/v1/publish/preflight', headers=writes(session), json=data)
+    assert preview.status_code == 200
+    return {**data, 'operation_id': 'a' * 32, 'expected_sha256': preview.json()['inspection']['review_digest']}
+
+
 def test_cookie_authenticates_actual_author_writes_and_keeps_tokens_out_of_db_and_responses(env):
     store, client, author, _moderator, _other, key = env
     response = client.post(LOGIN, headers=WRITE, json={'token': author})
@@ -60,11 +67,14 @@ def test_cookie_authenticates_actual_author_writes_and_keeps_tokens_out_of_db_an
         original = conn.execute('SELECT COUNT(*) FROM audit').fetchone()[0]
     data = package(key)
     assert client.post('/catalog/v1/publish/submissions', headers=WRITE, json=data).status_code == 403
+    assert client.post('/catalog/v1/publish/submissions', headers=writes(session), json=data).json()['error']['code'] == 'OPERATION_ID_REQUIRED'
+    assert client.post('/catalog/v1/publish/submissions', headers=writes(session), json={**data, 'operation_id': 'f' * 32}).json()['error']['code'] == 'REVIEW_DIGEST_REQUIRED'
     with store.connect(write=False) as conn:
         assert conn.execute('SELECT COUNT(*) FROM submissions').fetchone()[0] == 0
         assert conn.execute('SELECT COUNT(*) FROM audit').fetchone()[0] == original
-    created = client.post('/catalog/v1/publish/submissions', headers=writes(session), json=data)
+    created = client.post('/catalog/v1/publish/submissions', headers=writes(session), json=reviewed_submission(client, session, key))
     assert created.status_code == 200
+    assert client.get('/catalog/v1/web/operations/' + created.json()['operation_id']).json() == created.json()
     assert client.get('/catalog/v1/publish/submissions').json()['total'] == 1
     assert client.get('/catalog/v1/moderation/reviews').status_code == 403
     for response in (created, client.get('/catalog/v1/publish/submissions'), client.get('/catalog/v1/moderation/reviews')):
@@ -195,7 +205,7 @@ def test_browser_sessions_require_an_explicit_origin_and_loopback_exception(tmp_
 def test_snapshot_keeps_persistent_authority_and_bytes_but_never_revives_browser_sessions(env, tmp_path):
     store, client, author, moderator, _other, key = env
     session = login(client, author); raw = client.cookies[COOKIE]
-    created = client.post('/catalog/v1/publish/submissions', headers=writes(session), json=package(key)).json()
+    created = client.post('/catalog/v1/publish/submissions', headers=writes(session), json=reviewed_submission(client, session, key)).json()
     assert readiness(store.path) is not None
     bundle = tmp_path / 'session-backup'
     manifest = backup(store.path, bundle)
