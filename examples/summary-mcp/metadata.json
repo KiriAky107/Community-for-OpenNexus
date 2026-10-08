@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "package_id": "summary-mcp",
+  "type": "mcp",
+  "version": "1.0.0",
+  "name": "只读数值摘要 / Read-only numeric summary",
+  "license": "MIT",
+  "description": "连接单独启动的本地示例，计算数量、总和、均值与中位数。 / Connect to the separately started local example and summarize a numeric list.",
+  "platforms": [
+    "windows"
+  ],
+  "architectures": [
+    "x86_64"
+  ],
+  "min_app_version": "0.6.0",
+  "dependencies": {},
+  "permissions": [],
+  "changelog": "## 中文\n初版：绑定本地 Streamable HTTP 示例；安装配置不会启动服务器或启用工具。\n## English\nFirst version: local Streamable HTTP example; applying configuration neither starts the server nor enables tools."
+}

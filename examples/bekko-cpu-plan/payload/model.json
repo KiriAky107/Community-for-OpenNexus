@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "permissions": [],
+  "name": "Bekko CPU plan",
+  "model_key": "bekko",
+  "source": "hotchpotch/bekko-embedding-v1-a8m",
+  "revision": "c721113d59a1d91b447450324f51c4b3332c924a",
+  "license": "MIT",
+  "resources": {
+    "device": "cpu",
+    "cpu_threads": 2,
+    "memory_limit_mb": 8192,
+    "timeout_seconds": 1800,
+    "weights_included": false
+  },
+  "verified_platforms": [
+    "windows-x86_64"
+  ],
+  "runtime_config": {
+    "embedding_model": "bekko",
+    "device": "cpu",
+    "cpu_threads": 2,
+    "memory_limit_mb": 8192,
+    "timeout_seconds": 1800
+  }
+}

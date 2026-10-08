@@ -74,6 +74,22 @@ uv run python -m community check-package --release-file C:/author/signed-1.0.0/r
 
 输入元数据 JSON 声明 `package_id`、`type`、`version`、`name`、`license`、`description`、`platforms`、`architectures`、`min_app_version` 和 `changelog`，也可声明依赖、权限与应用版本上限。身份、发布时间、ZIP 大小、摘要和签名由命令参数与实际字节生成，不放入输入 JSON。输出目录必须是内容目录之外的新目录。`complete.json` 记录最终元数据与文件哈希；缺少此文件表示输出中断。已有密钥与输出均不会被覆盖。检查文件清单后，在工作台选择 `release.json` 与 `archive.zip`。构建过程不连接目录服务，也不执行包内代码。
 
+源码仓库包含四个原创 MIT 许可示例。每个内容目录携带完整许可和 `provenance.json`，元数据保留中英文更新说明。这些是供你以自己的命名空间签名的包源码，不会自动加入目录。清单面向现有 Windows x86_64 桌面配置与导入流程。
+
+| 源码 | 签名类型 | 使用结果与前提 |
+| --- | --- | --- |
+| [清晰讲解](examples/clear-explanations/metadata.json) | `persona` | 审阅具体讲解与自测提示，再应用到选定的 Persona 目标。不包含凭据或历史记录。 |
+| [测量摘要](examples/measurement-summary/payload/template.json) | `template` | 将 `main.py`、`config.json`、`data/measurements.csv` 导入为可审阅实验文件。随包 Python 运行时从四条虚构测量生成 JSON 与 Markdown 摘要。运行与成果导入分别确认。 |
+| [只读数值摘要](examples/summary-mcp/payload/mcp.json) | `mcp` | 应用本地 Streamable HTTP 连接。单独启动[原创示例服务器](examples/summary-mcp/server.py)，再审阅、测试并启用连接。工具只汇总数值参数，不访问文件或凭据。 |
+| [Bekko CPU 方案](examples/bekko-cpu-plan/payload/model.json) | `model` | 应用桌面已固定的 Bekko 模型身份与 CPU 预算。方案不含模型权重，也不触发下载；获取与推理仍由独立模型管理流程处理。内容内链接上游模型来源与 MIT 许可。 |
+
+```powershell
+uv run python -m community.publisher build --metadata-file examples/clear-explanations/metadata.json --content-dir examples/clear-explanations/payload --private-key-file C:/private/author-key/private.key --output-dir C:/author/clear-explanations-1.0.0 --namespace YOUR_NAMESPACE --author-id YOUR_AUTHOR_ID --key-id YOUR_KEY_ID --published-at 2026-10-08T08:00:00Z
+uv run python examples/summary-mcp/server.py --port 18970
+```
+
+仅在试用 MCP 示例时，在另一终端执行第二条命令。它只监听 `127.0.0.1`，目录安装与配置应用均不会启动它。更新时，将选定源码复制到作者工作目录，修改内容与 `metadata.json` 的版本和更新说明，再构建到新输出目录。经作者工作台提交与独立审核后，用户对比新版，分别批准安装和应用。缺少依赖或校验失败时，不修改原来的签名版本。
+
 配置 `COMMUNITY_WEB_ORIGIN` 后，从“作者与审核”进入 `/workbench`，使用已有角色 Token 登录。密码框在发出请求前清空；身份与 CSRF 证明只保留在内存中，服务器设置有期限的 HttpOnly Cookie。作者选择已签名发行 JSON 和原 ZIP，执行只读预检，核对许可、权限、签名、类型清单和实际文件哈希，再确认提交。提交状态和拒绝原因按页查看。元数据不超过 1 MiB，ZIP 不超过 10 MiB。
 
 审核员通过自己的会话处理待审提交，对比前一发布的元数据、权限与文件变化，并填写理由批准或拒绝。文件与差异每页最多 100 项。清单最多显示前 64 KiB，截断会明确标注；“保存已校验 ZIP”提供原归档供完整检查。包内文字按原文显示，不执行包内内容。

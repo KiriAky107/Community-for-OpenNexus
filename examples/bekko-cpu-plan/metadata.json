@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "package_id": "bekko-cpu-plan",
+  "type": "model",
+  "version": "1.0.0",
+  "name": "Bekko CPU 方案 / Bekko CPU plan",
+  "license": "MIT",
+  "description": "应用已固定来源的 Bekko 嵌入模型与 CPU 运行预算，模型文件由独立模型管理流程取得。 / Apply the pinned Bekko embedding model and CPU budgets; model acquisition remains separate.",
+  "platforms": [
+    "windows"
+  ],
+  "architectures": [
+    "x86_64"
+  ],
+  "min_app_version": "0.6.0",
+  "dependencies": {},
+  "permissions": [],
+  "changelog": "## 中文\n初版：绑定桌面现有 Bekko 固定版本与 CPU 预算；不包含权重，不触发下载。\n## English\nFirst version: existing desktop Bekko pin and CPU budgets; no weights or automatic download."
+}

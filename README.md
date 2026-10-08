@@ -74,6 +74,22 @@ uv run python -m community check-package --release-file C:/author/signed-1.0.0/r
 
 The metadata JSON declares `package_id`, `type`, `version`, `name`, `license`, `description`, `platforms`, `architectures`, `min_app_version` and `changelog`, with optional dependencies, permissions and maximum app version. Identity, publication time, ZIP size, hash and signature come from the command and inspected bytes; do not put these computed fields in the input JSON. Output directories must be new and outside the payload. `complete.json` records the final metadata and file hashes; a missing completion file identifies an interrupted output. Existing keys and outputs are never overwritten. Review the file list before choosing `release.json` and `archive.zip` in the workbench. Building neither contacts a catalog nor executes package code.
 
+The source checkout includes four original MIT-licensed examples. Each payload carries the full license and a `provenance.json`; metadata preserves Chinese and English update notes. They are package sources for your own namespace, rather than entries automatically added to a catalog. Their manifests target the existing Windows x86_64 desktop configuration and import workflows.
+
+| Source | Signed type | Useful result and prerequisites |
+| --- | --- | --- |
+| [Clear explanations](examples/clear-explanations/metadata.json) | `persona` | Review a prompt for concrete explanations and self-checks, then apply it to a selected Persona target. No credential or history is included. |
+| [Measurement summary](examples/measurement-summary/payload/template.json) | `template` | Import `main.py`, `config.json` and `data/measurements.csv` as reviewable experiment files. The bundled Python runtime produces JSON and Markdown summaries from four invented measurements. Run and output import require separate confirmation. |
+| [Read-only numeric summary](examples/summary-mcp/payload/mcp.json) | `mcp` | Apply a local Streamable HTTP connection. Start the [original example server](examples/summary-mcp/server.py) separately, then review, test and enable the connection. The tool summarizes numeric arguments and accesses no files or credentials. |
+| [Bekko CPU plan](examples/bekko-cpu-plan/payload/model.json) | `model` | Apply the desktop's pinned Bekko model identity and CPU budgets. The plan carries no model weights and triggers no download; acquisition and inference remain separate model-manager actions. Upstream model provenance and its MIT license are linked in the payload. |
+
+```powershell
+uv run python -m community.publisher build --metadata-file examples/clear-explanations/metadata.json --content-dir examples/clear-explanations/payload --private-key-file C:/private/author-key/private.key --output-dir C:/author/clear-explanations-1.0.0 --namespace YOUR_NAMESPACE --author-id YOUR_AUTHOR_ID --key-id YOUR_KEY_ID --published-at 2026-10-08T08:00:00Z
+uv run python examples/summary-mcp/server.py --port 18970
+```
+
+Run the second command in a separate terminal only when trying the MCP example. It listens on `127.0.0.1` and is not started by catalog installation or configuration application. For an update, copy the selected source to your author workspace, edit its content and `metadata.json` version and changelog, and build into a new output directory. Publish through the author workbench and independent moderator; users compare the new version and approve installation and application separately. A missing dependency or failed check does not justify changing the original signed version.
+
 With `COMMUNITY_WEB_ORIGIN` configured, open **Author and moderation** at `/workbench` and log in with the existing role token. The password field is cleared before sending; identity and CSRF proof remain in memory, and the server sets an expiring HttpOnly cookie. Authors choose the signed release JSON and original ZIP, run the read-only preflight, review license, permissions, signature, manifest and actual file hashes, then confirm submission. Submission status and rejection reasons are paged. Metadata is limited to 1 MiB and ZIPs to 10 MiB.
 
 Moderators use their own session to review pending submissions, compare metadata, permissions and file changes against the previous publication, and approve or reject with a reason. File and difference pages contain at most 100 entries. Manifests display at most 64 KiB and explicitly indicate truncation; **Save verified ZIP** provides the original archive for full inspection. Package text is rendered literally and never executed.

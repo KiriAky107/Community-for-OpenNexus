@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "permissions": [],
+  "executable": false,
+  "markdown": "# 测量摘要实验 / Measurement summary\n\n选择入口 main.py 和输入 config.json、data/measurements.csv，分别确认导入与隔离运行。输入包含四条虚构测量，不含用户数据。\n\nSelect main.py with config.json and data/measurements.csv. Review import and isolated execution separately. The four invented measurements contain no user data. Generated summary.md and summary.json remain outside the Vault until you review and import them.\n",
+  "experiment": {
+    "schema_version": 1,
+    "entry": "main.py",
+    "inputs": [
+      "config.json",
+      "data/measurements.csv"
+    ],
+    "files": [
+      {
+        "path": "main.py",
+        "content": "import csv\nimport json\nimport statistics\nfrom pathlib import Path\n\nsource = Path(__file__).parent\nconfig = json.loads((source / 'config.json').read_text(encoding='utf-8'))\nwith (source / 'data/measurements.csv').open(encoding='utf-8', newline='') as stream:\n    rows = list(csv.DictReader(stream))\nvalues = [float(row['seconds']) for row in rows]\nif not values:\n    raise ValueError('The input needs at least one measurement.')\nsummary = {'count': len(values), 'mean_seconds': statistics.fmean(values),\n           'median_seconds': statistics.median(values),\n           'above_threshold': sum(value > config['threshold_seconds'] for value in values)}\nPath('summary.json').write_text(json.dumps(summary, ensure_ascii=False, indent=2) + '\\n', encoding='utf-8')\nPath('summary.md').write_text(\n    '# 测量摘要 / Measurement summary\\n\\n'\n    f\"Count: {summary['count']}\\n\\nMean: {summary['mean_seconds']:.2f} s\\n\\n\"\n    f\"Median: {summary['median_seconds']:.2f} s\\n\\nAbove {config['threshold_seconds']} s: {summary['above_threshold']}\\n\",\n    encoding='utf-8')\nprint(json.dumps(summary, ensure_ascii=False))\n"
+      },
+      {
+        "path": "config.json",
+        "content": "{\n  \"threshold_seconds\": 12\n}\n"
+      },
+      {
+        "path": "data/measurements.csv",
+        "content": "label,seconds\n中文样本 A,8\n样本 B,12\nSample C,16\nSample D,20\n"
+      }
+    ]
+  }
+}

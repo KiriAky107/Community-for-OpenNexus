@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "license": "MIT",
+  "source": "https://github.com/KiriAky107/Community-for-OpenNexus/tree/main/examples/bekko-cpu-plan",
+  "content": "Original OpenNexus example authored for this repository. No user data, model weights or credentials are included.",
+  "model_source": "https://huggingface.co/hotchpotch/bekko-embedding-v1-a8m/tree/c721113d59a1d91b447450324f51c4b3332c924a",
+  "model_license": "MIT",
+  "model_license_source": "https://huggingface.co/hotchpotch/bekko-embedding-v1-a8m/blob/c721113d59a1d91b447450324f51c4b3332c924a/README.md",
+  "verified_scope": "Windows x86_64 desktop configuration shape and existing runtime budgets. This plan makes no inference benchmark claim."
+}

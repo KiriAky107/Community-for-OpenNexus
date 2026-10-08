@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "license": "MIT",
+  "source": "https://github.com/KiriAky107/Community-for-OpenNexus/tree/main/examples/summary-mcp",
+  "content": "Original OpenNexus example authored for this repository. No user data, model weights or credentials are included.",
+  "server_source": "https://github.com/KiriAky107/Community-for-OpenNexus/blob/main/examples/summary-mcp/server.py",
+  "server_license": "MIT",
+  "server_tool": "summarize_numbers",
+  "server_access": "Read-only numeric arguments; no files, credentials or outbound network."
+}

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "package_id": "measurement-summary",
+  "type": "template",
+  "version": "1.0.0",
+  "name": "测量摘要实验 / Measurement summary",
+  "license": "MIT",
+  "description": "从自带的虚构 CSV 数据生成 JSON 和 Markdown 摘要，修改阈值可比较结果。 / Summarize a small invented CSV dataset and compare thresholds.",
+  "platforms": [
+    "windows"
+  ],
+  "architectures": [
+    "x86_64"
+  ],
+  "min_app_version": "0.6.0",
+  "dependencies": {},
+  "permissions": [],
+  "changelog": "## 中文\n初版：三个可审阅输入文件、JSON 与 Markdown 摘要，运行需单独确认。\n## English\nFirst version: three reviewable source/input files and JSON/Markdown summaries; execution requires separate confirmation."
+}
