@@ -151,7 +151,7 @@ def inspect(release: Release, blob: bytes, *, details=False):
         if release.type == "persona" and not isinstance(value.get("system_prompt"), str): raise ValueError("缺少人设提示")
         if release.type == "template":
             from community.templates import validate_template
-            if validate_template(value) is not None and Version.parse(release.min_app_version) < Version(0, 6, 0):
+            if validate_template(value) is not None and Version.parse(release.min_app_version) < Version.parse('0.6.0-beta1'):
                 raise ValueError("实验模板要求支持多文件导入的应用版本")
         if release.type in {'model', 'mcp'}:
             from community.configurations import validate_configuration

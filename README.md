@@ -74,7 +74,7 @@ uv run python -m community check-package --release-file C:/author/signed-1.0.0/r
 
 The metadata JSON declares `package_id`, `type`, `version`, `name`, `license`, `description`, `platforms`, `architectures`, `min_app_version` and `changelog`, with optional dependencies, permissions and maximum app version. Identity, publication time, ZIP size, hash and signature come from the command and inspected bytes; do not put these computed fields in the input JSON. Output directories must be new and outside the payload. `complete.json` records the final metadata and file hashes; a missing completion file identifies an interrupted output. Existing keys and outputs are never overwritten. Review the file list before choosing `release.json` and `archive.zip` in the workbench. Building neither contacts a catalog nor executes package code.
 
-The source checkout includes five original MIT-licensed examples. Each payload carries the full license and a `provenance.json`; metadata preserves Chinese and English update notes. They are package sources for your own namespace, rather than entries automatically added to a catalog. Their manifests target the existing Windows x86_64 desktop configuration and import workflows.
+The source checkout includes five original MIT-licensed examples. Each payload carries the full license and a `provenance.json`; metadata preserves Chinese and English update notes. Sign these package sources under your own namespace and submit them through the workbench. Their manifests target Windows x86_64 desktop configuration and import workflows; check each package's `min_app_version` against the intended client before publishing.
 
 | Source | Signed type | Useful result and prerequisites |
 | --- | --- | --- |

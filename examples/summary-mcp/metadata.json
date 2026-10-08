@@ -12,7 +12,7 @@
   "architectures": [
     "x86_64"
   ],
-  "min_app_version": "0.6.0",
+  "min_app_version": "0.6.0-beta1",
   "dependencies": {},
   "permissions": [],
   "changelog": "## 中文\n1.1：数值摘要工具等待期限由30秒改为45秒；本机URL和只读服务保持一致，应用配置仍需另行审阅启用。\n## English\n1.1: Raise the numeric summary tool timeout from 30 to 45 seconds. The loopback URL and read-only service stay the same; applying settings still requires a separate enablement review."

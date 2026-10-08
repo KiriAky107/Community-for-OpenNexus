@@ -12,7 +12,7 @@
   "architectures": [
     "x86_64"
   ],
-  "min_app_version": "0.6.0",
+  "min_app_version": "0.6.0-beta1",
   "dependencies": {},
   "permissions": [],
   "changelog": "## 中文\n1.1：CPU线程预算由2改为1，适合与编辑工作并行；保持模型固定来源、修订、内存与超时，不包含权重。\n## English\n1.1: Use one CPU thread instead of two while editing alongside inference. Keep the pinned model source, revision, memory and timeout; no weights are included."

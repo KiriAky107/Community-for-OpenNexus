@@ -12,7 +12,7 @@
   "architectures": [
     "x86_64"
   ],
-  "min_app_version": "0.6.0",
+  "min_app_version": "0.6.0-beta1",
   "dependencies": {
     "measurement-summary": ">=1.1.0, <2.0.0"
   },

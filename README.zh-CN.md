@@ -74,7 +74,7 @@ uv run python -m community check-package --release-file C:/author/signed-1.0.0/r
 
 输入元数据 JSON 声明 `package_id`、`type`、`version`、`name`、`license`、`description`、`platforms`、`architectures`、`min_app_version` 和 `changelog`，也可声明依赖、权限与应用版本上限。身份、发布时间、ZIP 大小、摘要和签名由命令参数与实际字节生成，不放入输入 JSON。输出目录必须是内容目录之外的新目录。`complete.json` 记录最终元数据与文件哈希；缺少此文件表示输出中断。已有密钥与输出均不会被覆盖。检查文件清单后，在工作台选择 `release.json` 与 `archive.zip`。构建过程不连接目录服务，也不执行包内代码。
 
-源码仓库包含五个原创 MIT 许可示例。每个内容目录携带完整许可和 `provenance.json`，元数据保留中英文更新说明。这些是供你以自己的命名空间签名的包源码，不会自动加入目录。清单面向现有 Windows x86_64 桌面配置与导入流程。
+源码仓库包含五个原创 MIT 许可示例。每个内容目录携带完整许可和 `provenance.json`，元数据保留中英文更新说明。使用自己的命名空间为这些包源码签名，再通过工作台提交。清单面向 Windows x86_64 桌面配置与导入流程，发布前按每个包的 `min_app_version` 核对目标客户端。
 
 | 源码 | 签名类型 | 使用结果与前提 |
 | --- | --- | --- |

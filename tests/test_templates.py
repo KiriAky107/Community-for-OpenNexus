@@ -78,12 +78,31 @@ def test_http_publication_keeps_review_and_experiment_data_bound(env, name):
     assert client.get(release['download_path']).content == base64.b64decode(payload['archive_base64'])
 
 
-def test_experiment_templates_cannot_advertise_legacy_client_support():
+@pytest.mark.parametrize('minimum', ['0.5.9', '0.6.0-alpha1'])
+def test_experiment_templates_cannot_advertise_legacy_client_support(minimum):
     signer = Ed25519PrivateKey.generate()
     value = template_package(signer, FIXTURE['cases'][2]['manifest'])
     release = Release(**value['release'])
-    release.min_app_version = '0.5.9'
+    release.min_app_version = minimum
     with pytest.raises(ValueError): inspect(release, base64.b64decode(value['archive_base64']))
+
+
+@pytest.mark.parametrize('minimum', ['0.6.0-beta1', '0.6.0-beta2', '0.6.0', '0.6.1'])
+def test_experiment_templates_publish_for_supported_prerelease_and_stable_clients(env, minimum):
+    client, signer, author, moderator = env
+    value = template_package(signer, FIXTURE['cases'][2]['manifest'])
+    release = Release(**value['release'])
+    release.min_app_version = minimum
+    release.signature = base64.b64encode(signer.sign(signed_payload(release))).decode()
+    value['release'] = release.model_dump()
+    response = client.post('/catalog/v1/publish/submissions', headers=author, json=value)
+    assert response.status_code == 200, response.text
+    sid = response.json()['submission_id']
+    assert client.post('/catalog/v1/moderation/reviews', headers=moderator,
+                       json={'submission_id': sid, 'approve': True, 'reason': 'Reviewed exact prerelease-compatible metadata and experiment inputs'}).status_code == 200
+    published = client.get('/catalog/v1/packages').json()['items'][0]
+    assert published['min_app_version'] == minimum
+    assert client.get(published['download_path']).content == base64.b64decode(value['archive_base64'])
 
 
 def test_json_manifest_size_depth_nodes_and_invalid_utf8_are_rejected():

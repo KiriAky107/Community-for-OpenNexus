@@ -12,7 +12,7 @@
   "architectures": [
     "x86_64"
   ],
-  "min_app_version": "0.6.0",
+  "min_app_version": "0.6.0-beta1",
   "dependencies": {},
   "permissions": [],
   "changelog": "## 中文\n1.1：阈值由12秒改为10秒，四条相同测量中超过阈值的数量由2变为3；原输入数据和运行代码保留。\n## English\n1.1: Lower the threshold from 12 to 10 seconds. Three rather than two of the same four measurements exceed it; source data and execution code stay the same."

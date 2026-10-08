@@ -12,7 +12,7 @@
   "architectures": [
     "x86_64"
   ],
-  "min_app_version": "0.6.0",
+  "min_app_version": "0.6.0-beta1",
   "dependencies": {},
   "permissions": [],
   "changelog": "## 中文\n1.1：增加边界或反例，指出例子在哪些条件下不再适用。\n## English\n1.1: Add a boundary case or counterexample and explain when the example no longer applies."
