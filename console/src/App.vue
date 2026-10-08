@@ -125,6 +125,7 @@ onUnmounted(() => { generation++; clearPrepared(); window.removeEventListener('p
   <header class="topbar">
     <a class="brand" href="/"><img :src="logo" alt="OpenNexus" /><span><strong>OpenNexus</strong><small>Community</small></span></a>
     <div class="source-pill"><i :class="{ confirmed: sources }"></i>{{ sourceName }}</div>
+    <a class="wb-catalog-link" href="/workbench">作者与审核</a>
     <a class="docs-link" href="https://github.com/KiriAky107/Community-for-OpenNexus#quick-start" target="_blank" rel="noreferrer">部署与使用 ↗</a>
   </header>
   <main>

@@ -8,7 +8,7 @@ export class CatalogError extends Error {
 type Fetch = typeof fetch
 interface Cached { data: unknown; etag: string | null; checkedAt: number; bytes: number }
 const JSON_LIMIT = 4 * 1024 * 1024
-async function bounded(response: Response, limit: number): Promise<Uint8Array> {
+export async function bounded(response: Response, limit: number): Promise<Uint8Array> {
   const length = response.headers.get('Content-Length')
   if (length && Number(length) > limit) throw new CatalogError('RESPONSE_TOO_LARGE')
   if (!response.body) return new Uint8Array()

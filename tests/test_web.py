@@ -10,9 +10,10 @@ def test_public_shell_shared_links_static_assets_and_security_headers(tmp_path):
         assert 'text/html' in home.headers['content-type']
         assert '<title>OpenNexus Community</title>' in home.text
         assert client.get('/packages/examples/note-reviewer?version=1.0.0').content == home.content
+        assert client.get('/workbench').content == home.content
         paths = re.findall(r'(?:src|href)="(/assets/[^"]+)"', home.text)
         assert len(paths) >= 2
-        for path in ['/', '/packages/examples/note-reviewer', *paths]:
+        for path in ['/', '/workbench', '/packages/examples/note-reviewer', *paths]:
             response = client.get(path)
             assert response.status_code == 200
             assert response.headers['cache-control'] == 'no-store'
@@ -35,5 +36,6 @@ def test_missing_web_build_is_explicit_and_api_remains_available(tmp_path, monke
     (tmp_path / 'assets').mkdir()
     with TestClient(create_app(Registry(tmp_path / 'catalog.db'))) as client:
         assert client.get('/').status_code == 503
+        assert client.get('/workbench').status_code == 503
         assert client.get('/').json()['error']['code'] == 'CONSOLE_UNAVAILABLE'
         assert client.get('/catalog/v1/packages').status_code == 200

@@ -22,7 +22,7 @@
 
 Current release: [v0.6.0](https://github.com/KiriAky107/Community-for-OpenNexus/releases/tag/v0.6.0).
 
-Current development adds a public web catalog at `/`, with shareable package details, version history, search and type filters. The browser rechecks release and signing-key state before fetching an archive, validates its size and SHA-256, and provides an explicit save link. Offline metadata is labeled and cannot authorize a download.
+Current development adds a public web catalog at `/` and an author and moderator workbench at `/workbench`. The catalog offers shareable package details, version history, search and type filters. The workbench checks signed uploads, shows actual files and previous-version changes, and reconciles interrupted writes by their original operation IDs. Browser downloads recheck release and signing-key state, validate size and SHA-256, and provide an explicit save link.
 
 ## What’s New in 0.6.0
 
@@ -64,9 +64,15 @@ In OpenNexus, compare installed and available versions before installation. The 
 
 Prepare the manifest and ZIP, sign canonical release metadata locally, and run `check-package`. Submit with the author's token, then use a separate moderator identity to inspect and decide the submission. See [Administration](#administration) for the current CLI commands.
 
+With `COMMUNITY_WEB_ORIGIN` configured, open **Author and moderation** at `/workbench` and log in with the existing role token. The password field is cleared before sending; identity and CSRF proof remain in memory, and the server sets an expiring HttpOnly cookie. Authors choose the signed release JSON and original ZIP, run the read-only preflight, review license, permissions, signature, manifest and actual file hashes, then confirm submission. Submission status and rejection reasons are paged. Metadata is limited to 1 MiB and ZIPs to 10 MiB.
+
+Moderators use their own session to review pending submissions, compare metadata, permissions and file changes against the previous publication, and approve or reject with a reason. File and difference pages contain at most 100 entries. Manifests display at most 64 KiB and explicitly indicate truncation; **Save verified ZIP** provides the original archive for full inspection. Package text is rendered literally and never executed.
+
 ### 3. Handle an update or incident
 
-Publish an update as a new immutable version. If a package needs investigation, report it with a reason; authors or moderators can withdraw a published release. For an interrupted mutation, query the current submission or release state before choosing the next action. Revoked signatures and withdrawn archives become unavailable.
+Publish an update as a new immutable version. In the workbench, report a published release with a reason; moderators inspect the reported package and confirm a resolution or withdrawal. Authors can also withdraw their own published releases. Revoked signatures and withdrawn archives become unavailable.
+
+Each confirmed workbench action freezes its content and operation ID. An unconfirmed result locks resource and identity switching: choose **Query original operation** first. An existing receipt confirms the original action; a missing receipt enables an explicit retry with the same ID and content. Writes are never retried automatically. If the session expires, old package data is cleared and only the receipt reference remains; sign in as the original identity to query it. Missing receipts after expiry require the original content and ID to be reconciled by an administrator. **My sessions** lists only your active browser sessions and lets you revoke one, including the current session.
 
 ### 4. Back up the catalog
 
@@ -246,7 +252,7 @@ Set `COMMUNITY_WEB_ORIGIN` to the exact public HTTPS origin, such as `https://co
 
 `POST /catalog/v1/web/session` accepts `{ "token": "ROLE_TOKEN" }`. Its response and the read-only `GET` at the same route include the current role, namespace, session ID, expiry and a CSRF proof. Cookie-authenticated writes must send that proof as `X-Community-CSRF` and the exact same-origin `Origin`; cross-site and same-site sibling requests are refused. CLI bearer authentication remains available, but a request cannot combine it with a browser cookie. Role changes and principal revocation take effect on the next request.
 
-`GET /catalog/v1/web/sessions` lists only the current identity's active sessions. `POST /catalog/v1/web/sessions/{session_id}/revoke` removes an owned session; repeat revocation is safe. `POST /catalog/v1/web/session/logout` removes the current session and clears its cookie. Keep tokens and CSRF proofs out of URLs and browser storage. These routes provide the session API; the public catalog remains usable without login.
+`GET /catalog/v1/web/sessions` lists only the current identity's active sessions. `POST /catalog/v1/web/sessions/{session_id}/revoke` removes an owned session; repeat revocation is safe. `POST /catalog/v1/web/session/logout` removes the current session and clears its cookie. The `/workbench` page uses these routes without storing tokens or CSRF proofs in URLs or browser storage. The public catalog remains usable without login.
 
 Authors can send signed metadata and the Base64 ZIP to `POST /catalog/v1/publish/preflight` before committing a submission. It checks ownership, the current signing key, signature, actual archive bytes and immutable version without writing a submission or audit entry. The response includes a `review_digest`. Authorized `GET /catalog/v1/publish/submissions/{id}/inspection?offset=0&limit=100` returns actual file sizes and hashes, the manifest, permissions and dependencies, decisions and changes from the preceding published version. File and change lists are paged; a manifest preview beyond 64 KiB is explicitly marked as truncated. The authorized `/archive` route downloads the original ZIP for full inspection without executing it.
 

@@ -20,7 +20,7 @@ def mount_web(app):
     @app.middleware('http')
     async def web_headers(request, call_next):
         response = await call_next(request)
-        if request.url.path == '/' or request.url.path.startswith(('/packages/', '/assets/')):
+        if request.url.path in ('/', '/workbench') or request.url.path.startswith(('/packages/', '/assets/')):
             response.headers.update(HEADERS)
         return response
 
@@ -30,6 +30,7 @@ def mount_web(app):
         return FileResponse(STATIC / 'index.html', headers=HEADERS)
 
     app.add_api_route('/', shell, methods=['GET'], include_in_schema=False)
+    app.add_api_route('/workbench', shell, methods=['GET'], include_in_schema=False)
 
     @app.get('/packages/{namespace}/{package_id}', include_in_schema=False)
     def package_page(namespace: str, package_id: str):
