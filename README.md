@@ -240,6 +240,16 @@ uv run python -m community audit --after 0 --limit 30 --token-file moderator.tok
 
 Use `--reject` for rejection, `withdraw --release-id ID --reason TEXT` for withdrawal, `report --release-id ID --reason TEXT` for a report, and `revoke-key --key-id ID --reason TEXT` for key revocation. `status --submission-id ID` returns the authorized current state. Pages and audit cursors bound each response. Reports retain their original audit entry after resolution. An interrupted mutation exits with code 3 and `OUTCOME_UNKNOWN`; it is never automatically sent again. Inspect `submissions` or the current status before deciding what to do next. Redirects are refused. Loopback HTTP fixtures require the explicit `--allow-loopback-http` option.
 
+### Browser session API
+
+Set `COMMUNITY_WEB_ORIGIN` to the exact public HTTPS origin, such as `https://community.example.org`. The TLS proxy must preserve that host. The session API exchanges an existing author or moderator token for a `Secure`, `HttpOnly`, `SameSite=Strict` cookie. It does not return or persist the original token. `COMMUNITY_WEB_SESSION_TTL` sets an absolute lifetime in seconds: 7,200 by default, between 300 and 86,400. Reads do not extend it. Each identity can have eight active sessions; login allows ten attempts per minute per client address in each server process. Keep external rate limiting at the proxy.
+
+`POST /catalog/v1/web/session` accepts `{ "token": "ROLE_TOKEN" }`. Its response and the read-only `GET` at the same route include the current role, namespace, session ID, expiry and a CSRF proof. Cookie-authenticated writes must send that proof as `X-Community-CSRF` and the exact same-origin `Origin`; cross-site and same-site sibling requests are refused. CLI bearer authentication remains available, but a request cannot combine it with a browser cookie. Role changes and principal revocation take effect on the next request.
+
+`GET /catalog/v1/web/sessions` lists only the current identity's active sessions. `POST /catalog/v1/web/sessions/{session_id}/revoke` removes an owned session; repeat revocation is safe. `POST /catalog/v1/web/session/logout` removes the current session and clears its cookie. Keep tokens and CSRF proofs out of URLs and browser storage. These routes provide the session API; the public catalog remains usable without login.
+
+For an isolated HTTP demonstration, set `COMMUNITY_WEB_ORIGIN=http://127.0.0.1:8081` and run `uv run python -m community serve --allow-insecure-loopback-sessions`. The exception accepts only a loopback origin and listener. Public deployments use HTTPS and the default secure cookie policy.
+
 ## Backup and Recovery
 
 `/health` checks the process; `/ready` checks the existing database schema, access and write transaction availability without changing rows. It returns 503 when the database is unavailable. [The systemd unit](deployment/opennexus-community.service) and [environment example](deployment/community.env.example) use an unprivileged service account, a private data directory and a loopback listener. Install the checkout at `/opt/opennexus-community`, create the `opennexus-community` account, and place the reviewed environment file at `/etc/opennexus-community.env`. Install frozen dependencies with `uv sync --frozen --python /usr/bin/python3 --no-managed-python`, using a system Python 3.12 or later, so the protected home directory is not needed by the interpreter. An external TLS reverse proxy remains the operator's deployment responsibility.
@@ -252,6 +262,8 @@ uv run python -m community restore --input-dir C:/private/catalog-backup --outpu
 
 Backups use SQLite's online snapshot API, including committed WAL data. The completion manifest records the database hash, row counts and signed archive checks. Preserve the returned hash separately. Verification checks the SQLite structure, metadata signatures and archive digests, retaining revoked keys, withdrawn releases, old signed versions and audit records. Interrupted bundles without a complete manifest fail verification. Restore writes a verified snapshot to a new output path and keeps account and release states intact. Backups contain account token hashes and must be protected by operating-system permissions. After verifying the restored database, stop the service and explicitly select that database in its environment configuration before restarting it.
 
+The owned backup snapshot excludes short-lived browser sessions, without signing users out of the running source service. Verification refuses a backup containing active session rows. After restoration, browser users log in again; original principal tokens and signed package history remain intact. Backups made before the session table existed still verify and restore, and starting the service adds the empty table.
+
 ## API Overview
 
 | Route group | Access | Purpose |
@@ -262,6 +274,7 @@ Backups use SQLite's online snapshot API, including committed WAL data. The comp
 | `/catalog/v1/sources` | Public | Source identity and public keys |
 | `/catalog/v1/packages` | Public | Searchable, paginated catalog with ETag |
 | `/catalog/v1/releases/.../archive` | Public if active | Package archive download |
+| `/catalog/v1/web/session`, `/web/sessions/...` | Same-origin author or moderator | Expiring browser session, owned revocation and logout |
 | `/catalog/v1/publish/submissions` | Author | Immutable namespace publication |
 | `/catalog/v1/moderation/reviews` | Moderator | Independent review queue and decision |
 | `/catalog/v1/publish/submissions/...` | Owner or moderator | Publication state and reply recovery |

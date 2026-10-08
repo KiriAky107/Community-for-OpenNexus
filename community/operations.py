@@ -13,6 +13,7 @@ import time
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from .package import Release
+from .sessions import SESSION_COLUMNS
 
 TABLES = {
     'schema_version': ('version',),
@@ -21,6 +22,7 @@ TABLES = {
     'submissions': ('id', 'namespace', 'package_id', 'version', 'metadata', 'blob', 'author_id', 'state'),
     'audit': ('id', 'actor', 'action', 'subject', 'reason', 'timestamp'),
 }
+OPTIONAL_TABLES = {'web_sessions': SESSION_COLUMNS}
 
 
 class OperationError(Exception):
@@ -49,9 +51,10 @@ def schema(conn):
     if [row[0] for row in conn.execute('SELECT version FROM schema_version')] != [1]:
         raise OperationError('DATABASE_SCHEMA_UNSUPPORTED')
     names = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-    if names - set(TABLES) - {'sqlite_sequence'} or set(TABLES) - names:
+    if names - set(TABLES) - set(OPTIONAL_TABLES) - {'sqlite_sequence'} or set(TABLES) - names:
         raise OperationError('DATABASE_SCHEMA_UNSUPPORTED')
-    for name, columns in TABLES.items():
+    for name, columns in {**TABLES, **OPTIONAL_TABLES}.items():
+        if name not in names: continue
         if tuple(row[1] for row in conn.execute(f'PRAGMA table_info({name})')) != columns:
             raise OperationError('DATABASE_SCHEMA_UNSUPPORTED')
 
@@ -93,6 +96,8 @@ def inspect_database(path):
         schema(conn)
         if [row[0] for row in conn.execute('PRAGMA integrity_check')] != ['ok']:
             raise OperationError('DATABASE_INTEGRITY_FAILED')
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='web_sessions'").fetchone() and conn.execute('SELECT 1 FROM web_sessions LIMIT 1').fetchone():
+            raise OperationError('BACKUP_CONTAINS_BROWSER_SESSIONS')
         counts = {name: conn.execute(f'SELECT COUNT(*) FROM {name}').fetchone()[0] for name in TABLES if name != 'schema_version'}
         for key in conn.execute('SELECT id,namespace,public_key,revoked FROM keys'):
             if not isinstance(key['public_key'], bytes) or len(key['public_key']) != 32 or key['revoked'] not in (0, 1):
@@ -136,6 +141,11 @@ def backup(database, output_dir):
 
     with closing(connect_existing(database)) as source, closing(sqlite3.connect(target)) as destination:
         source.backup(destination, pages=256, progress=progress, sleep=0.05)
+        # Only the owned snapshot loses short-lived browser credentials. Live
+        # sessions remain valid at the source and cannot revive after recovery.
+        if destination.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='web_sessions'").fetchone():
+            destination.execute('DELETE FROM web_sessions')
+            destination.commit()
         destination.execute('PRAGMA journal_mode=DELETE').fetchone()
     os.chmod(target, 0o600)
     summary = inspect_database(target)

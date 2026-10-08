@@ -111,6 +111,7 @@ def parser():
     result.add_argument('--port', type=int, default=8081)
     result.add_argument('--timeout', type=float, default=15)
     result.add_argument('--allow-loopback-http', action='store_true')
+    result.add_argument('--allow-insecure-loopback-sessions', action='store_true')
     decision = result.add_mutually_exclusive_group()
     decision.add_argument('--approve', action='store_true')
     decision.add_argument('--reject', action='store_true')
@@ -164,7 +165,15 @@ def execute(args):
             if not 1 <= args.port <= 65535:
                 raise ClientError('PORT_INVALID')
             origins = tuple(value.strip() for value in os.getenv('COMMUNITY_ALLOWED_ORIGINS', '').split(',') if value.strip())
-            uvicorn.run(create_app(registry, os.getenv('COMMUNITY_SOURCE_ID', 'self-hosted'), origins), host=args.host or '127.0.0.1', port=args.port, access_log=False)
+            host = args.host or '127.0.0.1'
+            if args.allow_insecure_loopback_sessions and host not in {'127.0.0.1', 'localhost', '::1'}:
+                raise ClientError('LOOPBACK_SESSION_BIND_REQUIRED')
+            try:
+                app = create_app(registry, os.getenv('COMMUNITY_SOURCE_ID', 'self-hosted'), origins, web_origin=os.getenv('COMMUNITY_WEB_ORIGIN') or None,
+                                 session_ttl=int(os.getenv('COMMUNITY_WEB_SESSION_TTL', '7200')), allow_insecure_loopback_sessions=args.allow_insecure_loopback_sessions)
+            except ValueError:
+                raise ClientError('WEB_SESSION_CONFIGURATION_INVALID') from None
+            uvicorn.run(app, host=host, port=args.port, access_log=False, proxy_headers=False)
             return None, None
         if not args.id:
             raise ClientError('ID_REQUIRED')

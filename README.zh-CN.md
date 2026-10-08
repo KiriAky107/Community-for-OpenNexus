@@ -239,6 +239,16 @@ uv run python -m community audit --after 0 --limit 30 --token-file moderator.tok
 
 拒绝审核使用 `--reject`；撤回使用 `withdraw --release-id ID --reason TEXT`，举报使用 `report --release-id ID --reason TEXT`，撤销签名密钥使用 `revoke-key --key-id ID --reason TEXT`。`status --submission-id ID` 返回权限范围内的真实状态。队列支持分页，审计使用游标；举报处理后仍保留原始审计记录。写请求中断时返回退出码 3 和 `OUTCOME_UNKNOWN`，不会自动重发。先查询 `submissions` 或当前状态，再决定后续操作。客户端拒绝重定向；隔离测试的本机 HTTP 地址必须显式添加 `--allow-loopback-http`。
 
+### 网页会话 API
+
+将 `COMMUNITY_WEB_ORIGIN` 设置为确切的公开 HTTPS 来源，例如 `https://community.example.org`，TLS 代理须保留该主机名。会话 API 将现有作者或审核员 Token 换为 `Secure`、`HttpOnly`、`SameSite=Strict` Cookie，不返回或保存原 Token。`COMMUNITY_WEB_SESSION_TTL` 指定以秒为单位的绝对有效期，默认 7,200，范围为 300 至 86,400；读取不会延长期限。每个身份最多八个有效会话，每个服务进程按客户端地址限制每分钟十次登录尝试。代理仍需配置外部限流。
+
+`POST /catalog/v1/web/session` 接收 `{ "token": "ROLE_TOKEN" }`。响应和同一路由的只读 `GET` 返回当前角色、命名空间、会话编号、有效期及 CSRF 证明。Cookie 写请求必须通过 `X-Community-CSRF` 携带证明，并提供完全匹配的同源 `Origin`；跨站或同站其他子域的请求均被拒绝。CLI 保留 Bearer 认证，同一请求不能同时携带 Bearer 和网页 Cookie。角色变更和身份撤销在下一次请求生效。
+
+`GET /catalog/v1/web/sessions` 只列出当前身份的有效会话；`POST /catalog/v1/web/sessions/{session_id}/revoke` 撤销自己的会话，重复撤销不会重复产生作用。`POST /catalog/v1/web/session/logout` 移除当前会话并清空 Cookie。Token 和 CSRF 证明不得进入 URL 或浏览器存储。这些路由提供会话 API，公开目录仍可免登录浏览。
+
+隔离 HTTP 演示可设置 `COMMUNITY_WEB_ORIGIN=http://127.0.0.1:8081`，再运行 `uv run python -m community serve --allow-insecure-loopback-sessions`；该例外只接受本机来源和监听地址。公开部署使用 HTTPS 和默认的安全 Cookie 策略。
+
 ## 备份与恢复
 
 `/health` 检查进程，`/ready` 检查现有数据库的 schema、访问及写事务可用性，检查不改变记录；不可用时返回 503。[systemd 配置](deployment/opennexus-community.service) 和[环境变量示例](deployment/community.env.example) 使用非特权服务账号、私有数据目录和本机监听地址。将源码安装到 `/opt/opennexus-community`，创建 `opennexus-community` 账号，并将已核对的配置放到 `/etc/opennexus-community.env`。使用系统提供的 Python 3.12 或更新版本执行 `uv sync --frozen --python /usr/bin/python3 --no-managed-python`，避免解释器依赖被服务保护的用户主目录。对外的 TLS 反向代理由部署者配置。
@@ -251,6 +261,8 @@ uv run python -m community restore --input-dir C:/private/catalog-backup --outpu
 
 备份采用 SQLite 在线快照 API，包含 WAL 中已提交的数据。完成清单记录数据库哈希、记录数量和签名归档检查；请另行保存返回的哈希。校验检查 SQLite 结构、元数据签名及归档摘要，保留已撤销的密钥、已撤回的发行、旧签名版本和审计记录。没有完整清单的中断备份无法通过校验。恢复必须提供已记录的哈希及新的输出路径，不会替换运行中的数据库，也不改变账号或发行状态。备份含账号 Token 哈希，需要操作系统权限保护。核对恢复结果后，先停止服务，再显式修改环境配置中的数据库路径并重启。
 
+本次拥有的备份快照会移除短期网页会话，不会让原服务中的用户退出。校验拒绝含有效会话记录的备份。恢复后网页用户需要重新登录，原身份 Token 和签名包历史保留。旧版没有会话表的备份仍可校验与恢复，启动服务时增加空表。
+
 ## API 概览
 
 | 路由 | 访问级别 | 用途 |
@@ -261,6 +273,7 @@ uv run python -m community restore --input-dir C:/private/catalog-backup --outpu
 | `/catalog/v1/sources` | 公开 | 来源身份和公钥 |
 | `/catalog/v1/packages` | 公开 | 支持 ETag 的搜索和分页目录 |
 | `/catalog/v1/releases/.../archive` | 有效发行公开 | 下载扩展压缩包 |
+| `/catalog/v1/web/session`、`/web/sessions/...` | 同源作者或审核员 | 有效期内的网页会话、自己的会话撤销与退出 |
 | `/catalog/v1/publish/submissions` | 作者 | 命名空间内不可变发布 |
 | `/catalog/v1/moderation/reviews` | 审核员 | 独立审核队列和决定 |
 | `/catalog/v1/publish/submissions/...` | 所有者或审核员 | 发布状态和丢失回执核对 |
