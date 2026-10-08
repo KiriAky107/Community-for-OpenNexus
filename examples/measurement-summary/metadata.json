@@ -2,7 +2,7 @@
   "schema_version": 1,
   "package_id": "measurement-summary",
   "type": "template",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "测量摘要实验 / Measurement summary",
   "license": "MIT",
   "description": "从自带的虚构 CSV 数据生成 JSON 和 Markdown 摘要，修改阈值可比较结果。 / Summarize a small invented CSV dataset and compare thresholds.",
@@ -15,5 +15,5 @@
   "min_app_version": "0.6.0",
   "dependencies": {},
   "permissions": [],
-  "changelog": "## 中文\n初版：三个可审阅输入文件、JSON 与 Markdown 摘要，运行需单独确认。\n## English\nFirst version: three reviewable source/input files and JSON/Markdown summaries; execution requires separate confirmation."
+  "changelog": "## 中文\n1.1：阈值由12秒改为10秒，四条相同测量中超过阈值的数量由2变为3；原输入数据和运行代码保留。\n## English\n1.1: Lower the threshold from 12 to 10 seconds. Three rather than two of the same four measurements exceed it; source data and execution code stay the same."
 }

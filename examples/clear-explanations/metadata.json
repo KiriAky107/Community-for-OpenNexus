@@ -2,7 +2,7 @@
   "schema_version": 1,
   "package_id": "clear-explanations",
   "type": "persona",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "清晰讲解 / Clear explanations",
   "license": "MIT",
   "description": "用定义、具体例子与自测题讲解概念；保留假设与事实的区别。 / Explain a concept through its definition, one concrete example and a self-check.",
@@ -15,5 +15,5 @@
   "min_app_version": "0.6.0",
   "dependencies": {},
   "permissions": [],
-  "changelog": "## 中文\n初版：具体例子、自测与事实核对。\n## English\nFirst version: concrete examples, self-checks and explicit assumptions."
+  "changelog": "## 中文\n1.1：增加边界或反例，指出例子在哪些条件下不再适用。\n## English\n1.1: Add a boundary case or counterexample and explain when the example no longer applies."
 }

@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / 'examples'
 
 
-@pytest.mark.parametrize('name', ['clear-explanations', 'measurement-summary', 'summary-mcp', 'bekko-cpu-plan'])
+@pytest.mark.parametrize('name', ['clear-explanations', 'measurement-summary', 'summary-mcp', 'bekko-cpu-plan', 'measurement-coach'])
 def test_original_sources_build_with_author_key_and_preserve_license_and_raw_changelog(tmp_path, name):
     source = EXAMPLES / name
     keys = tmp_path / 'keys'; keygen(keys)
@@ -40,6 +40,10 @@ def test_original_sources_build_with_author_key_and_preserve_license_and_raw_cha
         provenance = json.loads(archive.read('provenance.json'))
         assert provenance['license'] == 'MIT' and provenance['source'].endswith('/' + name)
         assert 'private.key' not in archive.namelist() and 'server.py' not in archive.namelist()
+    if name == 'measurement-coach':
+        assert release.dependencies == {'measurement-summary': '>=1.1.0, <2.0.0'}
+        prompt = json.loads((source / 'payload/persona.json').read_text('utf-8'))['system_prompt']
+        assert '10 seconds' in prompt and 'expected values' in prompt
     if name == 'bekko-cpu-plan':
         plan = json.loads((source / 'payload/model.json').read_text('utf-8'))
         assert plan['model_key'] == plan['runtime_config']['embedding_model'] == 'bekko'
@@ -61,7 +65,7 @@ def test_measurement_example_produces_the_documented_real_outputs_without_modify
     result = subprocess.run([sys.executable, '-I', str(inputs / template['entry'])], cwd=outputs, capture_output=True, encoding='utf-8', timeout=10)
     assert result.returncode == 0, result.stderr
     actual = json.loads((outputs / 'summary.json').read_text('utf-8'))
-    assert actual == {'count': 4, 'mean_seconds': 14.0, 'median_seconds': 14.0, 'above_threshold': 2}
+    assert actual == {'count': 4, 'mean_seconds': 14.0, 'median_seconds': 14.0, 'above_threshold': 3}
     assert 'Measurement summary' in (outputs / 'summary.md').read_text('utf-8')
     assert actual == json.loads(result.stdout)
     assert before == {p.relative_to(inputs).as_posix(): p.read_bytes() for p in inputs.rglob('*') if p.is_file()}

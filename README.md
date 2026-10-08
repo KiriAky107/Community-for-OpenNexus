@@ -74,7 +74,7 @@ uv run python -m community check-package --release-file C:/author/signed-1.0.0/r
 
 The metadata JSON declares `package_id`, `type`, `version`, `name`, `license`, `description`, `platforms`, `architectures`, `min_app_version` and `changelog`, with optional dependencies, permissions and maximum app version. Identity, publication time, ZIP size, hash and signature come from the command and inspected bytes; do not put these computed fields in the input JSON. Output directories must be new and outside the payload. `complete.json` records the final metadata and file hashes; a missing completion file identifies an interrupted output. Existing keys and outputs are never overwritten. Review the file list before choosing `release.json` and `archive.zip` in the workbench. Building neither contacts a catalog nor executes package code.
 
-The source checkout includes four original MIT-licensed examples. Each payload carries the full license and a `provenance.json`; metadata preserves Chinese and English update notes. They are package sources for your own namespace, rather than entries automatically added to a catalog. Their manifests target the existing Windows x86_64 desktop configuration and import workflows.
+The source checkout includes five original MIT-licensed examples. Each payload carries the full license and a `provenance.json`; metadata preserves Chinese and English update notes. They are package sources for your own namespace, rather than entries automatically added to a catalog. Their manifests target the existing Windows x86_64 desktop configuration and import workflows.
 
 | Source | Signed type | Useful result and prerequisites |
 | --- | --- | --- |
@@ -82,9 +82,10 @@ The source checkout includes four original MIT-licensed examples. Each payload c
 | [Measurement summary](examples/measurement-summary/payload/template.json) | `template` | Import `main.py`, `config.json` and `data/measurements.csv` as reviewable experiment files. The bundled Python runtime produces JSON and Markdown summaries from four invented measurements. Run and output import require separate confirmation. |
 | [Read-only numeric summary](examples/summary-mcp/payload/mcp.json) | `mcp` | Apply a local Streamable HTTP connection. Start the [original example server](examples/summary-mcp/server.py) separately, then review, test and enable the connection. The tool summarizes numeric arguments and accesses no files or credentials. |
 | [Bekko CPU plan](examples/bekko-cpu-plan/payload/model.json) | `model` | Apply the desktop's pinned Bekko model identity and CPU budgets. The plan carries no model weights and triggers no download; acquisition and inference remain separate model-manager actions. Upstream model provenance and its MIT license are linked in the payload. |
+| [Measurement coach](examples/measurement-coach/metadata.json) | `persona` | Explain mean, median and threshold changes with Measurement summary 1.1. Stage its template dependency from the same source before reviewing the complete install order; importing experiment files and applying the prompt still require separate confirmation. |
 
 ```powershell
-uv run python -m community.publisher build --metadata-file examples/clear-explanations/metadata.json --content-dir examples/clear-explanations/payload --private-key-file C:/private/author-key/private.key --output-dir C:/author/clear-explanations-1.0.0 --namespace YOUR_NAMESPACE --author-id YOUR_AUTHOR_ID --key-id YOUR_KEY_ID --published-at 2026-10-08T08:00:00Z
+uv run python -m community.publisher build --metadata-file examples/clear-explanations/metadata.json --content-dir examples/clear-explanations/payload --private-key-file C:/private/author-key/private.key --output-dir C:/author/clear-explanations-1.1.0 --namespace YOUR_NAMESPACE --author-id YOUR_AUTHOR_ID --key-id YOUR_KEY_ID --published-at 2026-10-08T08:00:00Z
 uv run python examples/summary-mcp/server.py --port 18970
 ```
 

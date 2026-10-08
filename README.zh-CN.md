@@ -74,7 +74,7 @@ uv run python -m community check-package --release-file C:/author/signed-1.0.0/r
 
 输入元数据 JSON 声明 `package_id`、`type`、`version`、`name`、`license`、`description`、`platforms`、`architectures`、`min_app_version` 和 `changelog`，也可声明依赖、权限与应用版本上限。身份、发布时间、ZIP 大小、摘要和签名由命令参数与实际字节生成，不放入输入 JSON。输出目录必须是内容目录之外的新目录。`complete.json` 记录最终元数据与文件哈希；缺少此文件表示输出中断。已有密钥与输出均不会被覆盖。检查文件清单后，在工作台选择 `release.json` 与 `archive.zip`。构建过程不连接目录服务，也不执行包内代码。
 
-源码仓库包含四个原创 MIT 许可示例。每个内容目录携带完整许可和 `provenance.json`，元数据保留中英文更新说明。这些是供你以自己的命名空间签名的包源码，不会自动加入目录。清单面向现有 Windows x86_64 桌面配置与导入流程。
+源码仓库包含五个原创 MIT 许可示例。每个内容目录携带完整许可和 `provenance.json`，元数据保留中英文更新说明。这些是供你以自己的命名空间签名的包源码，不会自动加入目录。清单面向现有 Windows x86_64 桌面配置与导入流程。
 
 | 源码 | 签名类型 | 使用结果与前提 |
 | --- | --- | --- |
@@ -82,9 +82,10 @@ uv run python -m community check-package --release-file C:/author/signed-1.0.0/r
 | [测量摘要](examples/measurement-summary/payload/template.json) | `template` | 将 `main.py`、`config.json`、`data/measurements.csv` 导入为可审阅实验文件。随包 Python 运行时从四条虚构测量生成 JSON 与 Markdown 摘要。运行与成果导入分别确认。 |
 | [只读数值摘要](examples/summary-mcp/payload/mcp.json) | `mcp` | 应用本地 Streamable HTTP 连接。单独启动[原创示例服务器](examples/summary-mcp/server.py)，再审阅、测试并启用连接。工具只汇总数值参数，不访问文件或凭据。 |
 | [Bekko CPU 方案](examples/bekko-cpu-plan/payload/model.json) | `model` | 应用桌面已固定的 Bekko 模型身份与 CPU 预算。方案不含模型权重，也不触发下载；获取与推理仍由独立模型管理流程处理。内容内链接上游模型来源与 MIT 许可。 |
+| [测量实验讲解](examples/measurement-coach/metadata.json) | `persona` | 配合测量摘要1.1解释平均值、中位数和阈值变化。先从同一来源暂存模板依赖，再检查完整安装顺序；导入实验文件与应用人设仍分别确认。 |
 
 ```powershell
-uv run python -m community.publisher build --metadata-file examples/clear-explanations/metadata.json --content-dir examples/clear-explanations/payload --private-key-file C:/private/author-key/private.key --output-dir C:/author/clear-explanations-1.0.0 --namespace YOUR_NAMESPACE --author-id YOUR_AUTHOR_ID --key-id YOUR_KEY_ID --published-at 2026-10-08T08:00:00Z
+uv run python -m community.publisher build --metadata-file examples/clear-explanations/metadata.json --content-dir examples/clear-explanations/payload --private-key-file C:/private/author-key/private.key --output-dir C:/author/clear-explanations-1.1.0 --namespace YOUR_NAMESPACE --author-id YOUR_AUTHOR_ID --key-id YOUR_KEY_ID --published-at 2026-10-08T08:00:00Z
 uv run python examples/summary-mcp/server.py --port 18970
 ```
 

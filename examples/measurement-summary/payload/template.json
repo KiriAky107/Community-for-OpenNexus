@@ -2,7 +2,7 @@
   "schema_version": 1,
   "permissions": [],
   "executable": false,
-  "markdown": "# 测量摘要实验 / Measurement summary\n\n选择入口 main.py 和输入 config.json、data/measurements.csv，分别确认导入与隔离运行。输入包含四条虚构测量，不含用户数据。\n\nSelect main.py with config.json and data/measurements.csv. Review import and isolated execution separately. The four invented measurements contain no user data. Generated summary.md and summary.json remain outside the Vault until you review and import them.\n",
+  "markdown": "# 测量摘要实验 / Measurement summary\n\n选择入口 main.py 和输入 config.json、data/measurements.csv，分别确认导入与隔离运行。输入包含四条虚构测量，不含用户数据。\n\nSelect main.py with config.json and data/measurements.csv. Review import and isolated execution separately. The four invented measurements contain no user data. Generated summary.md and summary.json remain outside the Vault until you review and import them.\n\n1.1 默认阈值为10秒；四条测量的平均值与中位数仍为14秒，超过阈值的数量为3。只覆盖你在差异预览中选定的文件。\n\nVersion 1.1 uses a 10-second threshold. The same four measurements have mean and median 14 seconds; three exceed the threshold. Replace only the files you select in the difference preview.\n",
   "experiment": {
     "schema_version": 1,
     "entry": "main.py",
@@ -17,7 +17,7 @@
       },
       {
         "path": "config.json",
-        "content": "{\n  \"threshold_seconds\": 12\n}\n"
+        "content": "{\n  \"threshold_seconds\": 10\n}\n"
       },
       {
         "path": "data/measurements.csv",

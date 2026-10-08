@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "package_id": "measurement-coach",
+  "type": "persona",
+  "version": "1.0.0",
+  "name": "测量实验讲解 / Measurement coach",
+  "license": "MIT",
+  "description": "针对测量摘要模板，解释平均值、中位数和10秒阈值计数，区分预期结果与实际运行。 / Explain mean, median and the 10-second threshold in the measurement template, separating expected values from actual runs.",
+  "platforms": [
+    "windows"
+  ],
+  "architectures": [
+    "x86_64"
+  ],
+  "min_app_version": "0.6.0",
+  "dependencies": {
+    "measurement-summary": ">=1.1.0, <2.0.0"
+  },
+  "permissions": [],
+  "changelog": "## 中文\n初版：配合测量摘要1.1模板讲解四条虚构数据；依赖同一作者命名空间的模板，安装和应用分别审阅。\n## English\nFirst version: Explain the four invented measurements with the 1.1 summary template. Require that template in the same author namespace; review installation and application separately."
+}
