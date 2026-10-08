@@ -47,7 +47,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: KiriAky107/OpenNexus
-          ref: 276b449c27c079474c9d978fe633ff28b53b1c7b
+          ref: c9bd0dfcdc9975102566a19f709901d1f0de1d0a
           path: .build/release-tools
           persist-credentials: false
           sparse-checkout: scripts
