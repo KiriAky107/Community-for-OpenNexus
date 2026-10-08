@@ -64,6 +64,16 @@ uv run python -m community serve
 
 准备清单和 ZIP，在本地签名规范化发行元数据，再运行 `check-package`。使用作者 Token 提交，由独立审核员身份查看并处理。当前 CLI 命令见[管理命令](#管理命令)。
 
+离线作者工具从一个内容目录生成 ZIP，检查实际文件与类型清单，并签名发行元数据。在仓库之外建立私有目录，通过操作系统访问控制保护它。密钥只需生成一次；仅向命名空间管理员登记 `public.key`，`private.key` 留在作者设备上。
+
+```powershell
+uv run python -m community.publisher keygen --output-dir C:/private/author-key
+uv run python -m community.publisher build --metadata-file C:/author/metadata.json --content-dir C:/author/payload --private-key-file C:/private/author-key/private.key --output-dir C:/author/signed-1.0.0 --namespace YOUR_NAMESPACE --author-id YOUR_AUTHOR_ID --key-id YOUR_KEY_ID --published-at 2026-10-08T08:00:00Z
+uv run python -m community check-package --release-file C:/author/signed-1.0.0/release.json --archive-file C:/author/signed-1.0.0/archive.zip --public-key-file C:/author/signed-1.0.0/public.key
+```
+
+输入元数据 JSON 声明 `package_id`、`type`、`version`、`name`、`license`、`description`、`platforms`、`architectures`、`min_app_version` 和 `changelog`，也可声明依赖、权限与应用版本上限。身份、发布时间、ZIP 大小、摘要和签名由命令参数与实际字节生成，不放入输入 JSON。输出目录必须是内容目录之外的新目录。`complete.json` 记录最终元数据与文件哈希；缺少此文件表示输出中断。已有密钥与输出均不会被覆盖。检查文件清单后，在工作台选择 `release.json` 与 `archive.zip`。构建过程不连接目录服务，也不执行包内代码。
+
 配置 `COMMUNITY_WEB_ORIGIN` 后，从“作者与审核”进入 `/workbench`，使用已有角色 Token 登录。密码框在发出请求前清空；身份与 CSRF 证明只保留在内存中，服务器设置有期限的 HttpOnly Cookie。作者选择已签名发行 JSON 和原 ZIP，执行只读预检，核对许可、权限、签名、类型清单和实际文件哈希，再确认提交。提交状态和拒绝原因按页查看。元数据不超过 1 MiB，ZIP 不超过 10 MiB。
 
 审核员通过自己的会话处理待审提交，对比前一发布的元数据、权限与文件变化，并填写理由批准或拒绝。文件与差异每页最多 100 项。清单最多显示前 64 KiB，截断会明确标注；“保存已校验 ZIP”提供原归档供完整检查。包内文字按原文显示，不执行包内内容。

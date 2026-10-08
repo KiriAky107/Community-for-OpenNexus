@@ -64,6 +64,16 @@ In OpenNexus, compare installed and available versions before installation. The 
 
 Prepare the manifest and ZIP, sign canonical release metadata locally, and run `check-package`. Submit with the author's token, then use a separate moderator identity to inspect and decide the submission. See [Administration](#administration) for the current CLI commands.
 
+The offline author tool builds the ZIP from one payload directory, checks the actual files and type manifest, and signs the release metadata. Create a private directory outside the checkout and protect it with your operating system's access controls. Generate a key once; register only `public.key` with the namespace operator. Keep `private.key` on the author device.
+
+```powershell
+uv run python -m community.publisher keygen --output-dir C:/private/author-key
+uv run python -m community.publisher build --metadata-file C:/author/metadata.json --content-dir C:/author/payload --private-key-file C:/private/author-key/private.key --output-dir C:/author/signed-1.0.0 --namespace YOUR_NAMESPACE --author-id YOUR_AUTHOR_ID --key-id YOUR_KEY_ID --published-at 2026-10-08T08:00:00Z
+uv run python -m community check-package --release-file C:/author/signed-1.0.0/release.json --archive-file C:/author/signed-1.0.0/archive.zip --public-key-file C:/author/signed-1.0.0/public.key
+```
+
+The metadata JSON declares `package_id`, `type`, `version`, `name`, `license`, `description`, `platforms`, `architectures`, `min_app_version` and `changelog`, with optional dependencies, permissions and maximum app version. Identity, publication time, ZIP size, hash and signature come from the command and inspected bytes; do not put these computed fields in the input JSON. Output directories must be new and outside the payload. `complete.json` records the final metadata and file hashes; a missing completion file identifies an interrupted output. Existing keys and outputs are never overwritten. Review the file list before choosing `release.json` and `archive.zip` in the workbench. Building neither contacts a catalog nor executes package code.
+
 With `COMMUNITY_WEB_ORIGIN` configured, open **Author and moderation** at `/workbench` and log in with the existing role token. The password field is cleared before sending; identity and CSRF proof remain in memory, and the server sets an expiring HttpOnly cookie. Authors choose the signed release JSON and original ZIP, run the read-only preflight, review license, permissions, signature, manifest and actual file hashes, then confirm submission. Submission status and rejection reasons are paged. Metadata is limited to 1 MiB and ZIPs to 10 MiB.
 
 Moderators use their own session to review pending submissions, compare metadata, permissions and file changes against the previous publication, and approve or reject with a reason. File and difference pages contain at most 100 entries. Manifests display at most 64 KiB and explicitly indicate truncation; **Save verified ZIP** provides the original archive for full inspection. Package text is rendered literally and never executed.
