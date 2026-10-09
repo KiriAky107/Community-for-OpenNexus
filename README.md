@@ -13,24 +13,24 @@
   </p>
 
   <p>
-    <a href="https://github.com/KiriAky107/Community-for-OpenNexus/releases/tag/v0.6.0"><img src="https://img.shields.io/badge/Version-0.6.0-5865f2?style=flat-square" alt="Version" /></a> <a href="https://github.com/KiriAky107/Community-for-OpenNexus/actions/workflows/ci.yml"><img src="https://github.com/KiriAky107/Community-for-OpenNexus/actions/workflows/ci.yml/badge.svg" alt="CI" /></a> <img src="https://img.shields.io/badge/Python-3.12%2B-3776ab?style=flat-square" alt="Python 3.12+" /> <img src="https://img.shields.io/badge/API-FastAPI-05998b?style=flat-square" alt="FastAPI" /> <img src="https://img.shields.io/badge/Signatures-Ed25519-6366f1?style=flat-square" alt="Ed25519" /> <img src="https://img.shields.io/badge/Metadata-SQLite-003b57?style=flat-square" alt="SQLite" /> <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22c55e?style=flat-square" alt="MIT License" /></a>
+    <a href="https://github.com/KiriAky107/Community-for-OpenNexus/releases/tag/v0.7.0"><img src="https://img.shields.io/badge/Version-0.7.0-5865f2?style=flat-square" alt="Version" /></a> <a href="https://github.com/KiriAky107/Community-for-OpenNexus/actions/workflows/ci.yml"><img src="https://github.com/KiriAky107/Community-for-OpenNexus/actions/workflows/ci.yml/badge.svg" alt="CI" /></a> <img src="https://img.shields.io/badge/Python-3.12%2B-3776ab?style=flat-square" alt="Python 3.12+" /> <img src="https://img.shields.io/badge/API-FastAPI-05998b?style=flat-square" alt="FastAPI" /> <img src="https://img.shields.io/badge/Signatures-Ed25519-6366f1?style=flat-square" alt="Ed25519" /> <img src="https://img.shields.io/badge/Metadata-SQLite-003b57?style=flat-square" alt="SQLite" /> <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22c55e?style=flat-square" alt="MIT License" /></a>
   </p>
 
 </div>
 
 ---
 
-Current release: [v0.6.0](https://github.com/KiriAky107/Community-for-OpenNexus/releases/tag/v0.6.0).
+Current release: [v0.7.0](https://github.com/KiriAky107/Community-for-OpenNexus/releases/tag/v0.7.0).
 
-Current development adds a public web catalog at `/` and an author and moderator workbench at `/workbench`. The catalog offers shareable package details, version history, search and type filters. The workbench checks signed uploads, shows actual files and previous-version changes, and reconciles interrupted writes by their original operation IDs. Browser downloads recheck release and signing-key state, validate size and SHA-256, and provide an explicit save link.
+0.7.0 provides a public catalog at `/` and an author and moderator workbench at `/workbench`. Authors build signed archives locally; reviewers inspect actual files and changes before deciding. Users can try licensed examples and review their installation, updates and application in OpenNexus.
 
-## What’s New in 0.6.0
+## What’s New in 0.7.0
 
-- Filter, count and paginate catalogs in database queries, with semantic version ordering and query-specific ETags.
-- Pair with desktop pagination, installed-version comparison and reviewed updates, including source, permissions, dependency and compatibility checks.
-- Personas, experiment templates, MCP configurations and model profiles use shared declarative contracts. Templates preserve actual source and input extensions.
-- Author and moderator CLIs validate submissions, require independent review and handle withdrawal, reports and cursor-based audit records while keeping releases immutable.
-- Provide readiness checks, online SQLite snapshots, digest and signature verification, and restoration into a new target. GitHub CI verifies deployment packages and fixed source archives.
+- **Public web catalog**: Search, filter and paginate packages, share version details and read the original bilingual notes. Downloads recheck release and key state, verify size and SHA-256, and provide an explicit save link.
+- **Author and moderator workbench**: Use same-origin sessions with role checks, expiry, logout and revocation. The token field is cleared before sending; identity and CSRF proof stay in memory, and an expiring HttpOnly cookie carries the session.
+- **Reviewable operations**: Inspect signed metadata, actual files, manifests and previous-version differences before confirming a frozen submission or review. Rejection reasons, reports and withdrawals retain records; unknown writes are queried by their original operation IDs.
+- **Offline author tools and examples**: Create keys and signed ZIPs locally. Source and deployment archives include five MIT-licensed examples covering personas, a multi-file experiment, a local read-only MCP configuration and a pinned model profile, including a persona with a template dependency.
+- **Updates and recovery**: Review desktop candidate updates, target differences and rollback separately. Withdrawn versions and revoked keys block new use while applied user data is preserved. Online backups retain catalog records and original archives; restored browser sessions require a new login.
 
 ## Highlights
 
@@ -74,7 +74,7 @@ uv run python -m community check-package --release-file C:/author/signed-1.0.0/r
 
 The metadata JSON declares `package_id`, `type`, `version`, `name`, `license`, `description`, `platforms`, `architectures`, `min_app_version` and `changelog`, with optional dependencies, permissions and maximum app version. Identity, publication time, ZIP size, hash and signature come from the command and inspected bytes; do not put these computed fields in the input JSON. Output directories must be new and outside the payload. `complete.json` records the final metadata and file hashes; a missing completion file identifies an interrupted output. Existing keys and outputs are never overwritten. Review the file list before choosing `release.json` and `archive.zip` in the workbench. Building neither contacts a catalog nor executes package code.
 
-The source checkout includes five original MIT-licensed examples. Each payload carries the full license and a `provenance.json`; metadata preserves Chinese and English update notes. Sign these package sources under your own namespace and submit them through the workbench. Their manifests target Windows x86_64 desktop configuration and import workflows; check each package's `min_app_version` against the intended client before publishing.
+The source and deployment archives include five original MIT-licensed examples. Each payload carries the full license and a `provenance.json`; metadata preserves Chinese and English update notes. Sign these package sources under your own namespace and submit them through the workbench. Their manifests target Windows x86_64 desktop configuration and import workflows; check each package's `min_app_version` against the intended client before publishing.
 
 | Source | Signed type | Useful result and prerequisites |
 | --- | --- | --- |
