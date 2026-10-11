@@ -21,7 +21,7 @@ from .catalog_query import configure_connection, ensure_indexes, group_page, pag
 from .operations import readiness
 from .web import mount_web
 from .sessions import BrowserSessions, SessionError, SESSION_SCHEMA
-from .workbench import details, digest, inspection, receipt, release_digest
+from .workbench import details, digest, inspection, receipt, release_digest, text_difference, TextReviewError
 
 
 class CatalogError(Exception):
@@ -231,6 +231,19 @@ def create_app(registry: Registry, source_id="self-hosted", allowed_origins=(), 
             if not item: raise CatalogError(404, 'SUBMISSION_NOT_FOUND')
             if actor['role'] != 'moderator' and actor['id'] != item['author_id']: raise CatalogError(403, 'OWNERSHIP_REQUIRED')
             try: return details(conn, item, offset=offset, limit=limit)
+            except Exception: raise CatalogError(422, 'PACKAGE_VALIDATION_FAILED') from None
+
+    @app.get('/catalog/v1/publish/submissions/{submission_id}/inspection/text')
+    def submission_text(submission_id: str, request: Request, path: str = Query(min_length=1, max_length=65536),
+                        expected_sha256: str = Query(pattern=r'^[a-f0-9]{64}$'),
+                        previous_release_id: str = Query(default='', max_length=160), authorization: str = Header(default='')):
+        with registry.connect(write=False) as conn:
+            actor = principal(conn, request, authorization)
+            item = conn.execute('SELECT * FROM submissions WHERE id=?', (submission_id,)).fetchone()
+            if not item: raise CatalogError(404, 'SUBMISSION_NOT_FOUND')
+            if actor['role'] != 'moderator' and actor['id'] != item['author_id']: raise CatalogError(403, 'OWNERSHIP_REQUIRED')
+            try: return text_difference(conn, item, path, expected_sha256, previous_release_id)
+            except TextReviewError as exc: raise CatalogError(exc.status, exc.code) from None
             except Exception: raise CatalogError(422, 'PACKAGE_VALIDATION_FAILED') from None
 
     @app.get('/catalog/v1/publish/submissions/{submission_id}/archive')

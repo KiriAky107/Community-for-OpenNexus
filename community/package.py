@@ -68,7 +68,7 @@ def verify(release: Release, public_key: bytes):
     Ed25519PublicKey.from_public_bytes(public_key).verify(base64.b64decode(release.signature, validate=True), signed_payload(release))
 
 
-def inspect(release: Release, blob: bytes, *, details=False):
+def inspect(release: Release, blob: bytes, *, details=False, contents=None):
     if len(blob) != release.size or hashlib.sha256(blob).hexdigest() != release.sha256:
         raise ValueError("摘要或长度不匹配")
     max_size, max_entries = ((10 * 1024 * 1024, 100) if release.type == "theme" else (50 * 1024 * 1024, 2048))
@@ -161,4 +161,8 @@ def inspect(release: Release, blob: bytes, *, details=False):
         manifest = files[matches[0]]
         result.update(file_list=[{'path': path, 'bytes': len(content), 'sha256': hashlib.sha256(content).hexdigest()} for path, content in sorted(files.items())],
                       manifest_text=manifest[:65536].decode('utf-8-sig', errors='replace'), manifest_truncated=len(manifest) > 65536)
+    # Optional in-memory review data is handed out only after all package checks pass.
+    # It never enters the public inspection JSON or writes files to disk.
+    if contents is not None:
+        contents.update(files)
     return result
