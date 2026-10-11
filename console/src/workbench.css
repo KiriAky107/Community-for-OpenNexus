@@ -57,3 +57,8 @@
 @media (max-width: 720px) { .wb-grid { grid-template-columns: 1fr; } .wb-list { max-height: 440px; overflow: auto; } .wb-session > div { display: grid; gap: 7px; } .wb-upload { grid-template-columns: 1fr; } .wb-card { padding: 20px; } .wb-topbar { gap: 18px; } }
 @media (max-width: 540px) { .wb-tabs { gap: 8px; } .wb-tabs button { padding: 9px 12px; font-size: 12px; } .wb-session-row { align-items: start; gap: 10px; } .wb-session-row button { font-size: 12px; padding: 9px; } .wb-confirm .banner { display: block; } .wb-working { right: 12px; bottom: 12px; } }
 @media (max-width: 540px) { .topbar:not(.wb-topbar) { height: auto; min-height: 76px; padding-top: 16px; padding-bottom: 16px; flex-wrap: wrap; } .topbar:not(.wb-topbar) .source-pill { order: 3; max-width: 100%; } }
+/* Management filters share the workbench's bounded, stacked mobile layout. */
+.wb-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; margin: 1rem 0; }
+.wb-list form { display: grid; gap: .7rem; margin-bottom: 1rem; }
+.wb-filters input, .wb-list select { width: 100%; min-width: 0; }
+@media (max-width: 720px) { .wb-filters { grid-template-columns: minmax(0, 1fr); } }

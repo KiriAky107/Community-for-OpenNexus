@@ -1,6 +1,6 @@
 import { bounded, CatalogError } from './api.ts'
-import { object, parseDetail, parseItem, parsePage, parsePreview, parseReceipt, parseReports, parseReviews, parseSession, parseSessions, parseTextDifference, validateReceipt } from './workbenchTypes.ts'
-import type { Detail, Intent, Session } from './workbenchTypes.ts'
+import { object, parseDetail, parseItem, parsePage, parsePreview, parseReceipt, parseReports, parseReviews, parseSession, parseSessions, parseTextDifference, parseAudit, parseKeys, validateReceipt } from './workbenchTypes.ts'
+import type { AuditFilters, Detail, Intent, Session } from './workbenchTypes.ts'
 import { parseMetadata } from './types.ts'
 import type { Metadata } from './types.ts'
 
@@ -96,6 +96,27 @@ export class WorkbenchClient {
   }
   preflight(release: Metadata, archive_base64: string) { return this.request('/catalog/v1/publish/preflight', parsePreview, { release, archive_base64 }) }
   reports(after = 0) { return this.request(`/catalog/v1/moderation/reports?after=${after}&limit=20`, parseReports) }
+  async audit(filters: AuditFilters, before = Number.MAX_SAFE_INTEGER) {
+    if (this.current?.role !== 'moderator') throw new CatalogError('ROLE_REQUIRED', 403)
+    const query = new URLSearchParams({ ...filters, before: String(before), limit: '20' })
+    const result = await this.request(`/catalog/v1/moderation/audit?${query}`, parseAudit)
+    if (result.items.length > 20 || result.items.some((item, index) => !item.id || item.id >= (index ? result.items[index - 1]!.id : before)) || (result.next_cursor !== null && result.next_cursor !== result.items.at(-1)?.id)) throw new CatalogError('INVALID_RESPONSE')
+    return result
+  }
+  async keys(q = '', state = '', offset = 0) {
+    const ticket = this.generation, query = new URLSearchParams({ q, offset: String(offset), limit: '20' })
+    if (state) query.set('state', state)
+    const result = await this.request(`/catalog/v1/publish/keys?${query}`, parseKeys)
+    if (result.offset !== offset || result.limit !== 20 || result.items.some(key => this.current?.role === 'author' && key.namespace !== this.current.namespace)) throw new CatalogError('INVALID_RESPONSE')
+    for (const key of result.items) {
+      const hex = async (bytes: Uint8Array) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new Uint8Array(bytes).buffer)), byte => byte.toString(16).padStart(2, '0')).join('')
+      const fingerprint = await hex(Uint8Array.from(atob(key.public_key), value => value.charCodeAt(0)))
+      const digest = await hex(new TextEncoder().encode(JSON.stringify({ key_id: key.key_id, namespace: key.namespace, public_key: key.public_key, revoked: key.revoked })))
+      if (ticket !== this.generation) throw new CatalogError('STALE_RESPONSE')
+      if (fingerprint !== key.fingerprint || digest !== key.review_digest) throw new CatalogError('INVALID_RESPONSE')
+    }
+    return result
+  }
   async perform(intent: Intent) {
     if (this.current?.principal_id !== intent.principal_id) throw new CatalogError('SESSION_CHANGED', 401)
     const value = await this.request(intent.path, parseReceipt, intent.body)
@@ -161,7 +182,7 @@ export function workbenchMessage(error: unknown): string {
   const messages: Record<string, string> = {
     AUTH_REQUIRED: '会话已失效，请重新登录后核对原操作。', SESSION_CHANGED: '身份或角色已变化，请重新确认会话。', WEB_ORIGIN_REQUIRED: '管理员需要配置 COMMUNITY_WEB_ORIGIN 才能启用工作台登录。', WEB_ORIGIN_MISMATCH: '网页来源与服务配置不一致，请从管理员指定的同源地址进入。',
     SESSION_LIMIT: '已达到八个有效会话，请在已登录页面撤销旧会话或等待到期。', SESSION_ALREADY_ACTIVE: '浏览器已有会话，请重新确认会话。', LOGIN_RATE_LIMIT: '登录尝试过多，请稍后再试。', CSRF_REQUIRED: '会话证明已变化，请重新确认会话。', ROLE_REQUIRED: '当前身份没有执行该操作的角色。', OWNERSHIP_REQUIRED: '当前身份没有访问这个提交的权限。', NAMESPACE_OWNERSHIP: '签名元数据的作者或命名空间与当前身份不一致。', UNTRUSTED_SIGNER: '签名公钥未登记或已撤销，无法提交或批准。', SELF_REVIEW_FORBIDDEN: '作者不能审核自己的提交，请由独立审核员处理。',
-    IMMUTABLE_VERSION: '该版本已经提交，不能替换。请查看原状态或准备新的版本。', REVIEW_CHANGED: '检查内容已变化，请刷新详情后重新审核。', REVIEW_ALREADY_CLOSED: '这个提交已由另一操作处理，请刷新状态。', REPORT_ALREADY_RESOLVED: '这条举报已经处理，请刷新队列。', RELEASE_ALREADY_WITHDRAWN: '发行已撤回，请刷新状态。',
+    IMMUTABLE_VERSION: '该版本已经提交，不能替换。请查看原状态或准备新的版本。', REVIEW_CHANGED: '检查内容已变化，请刷新详情后重新审核。', REVIEW_ALREADY_CLOSED: '这个提交已由另一操作处理，请刷新状态。', REPORT_ALREADY_RESOLVED: '这条举报已经处理，请刷新队列。', RELEASE_ALREADY_WITHDRAWN: '发行已撤回，请刷新状态。', KEY_ALREADY_REVOKED: '公钥已撤销，请刷新公钥状态。', KEY_NOT_FOUND: '公钥已不存在，请刷新列表。',
     PACKAGE_VALIDATION_FAILED: '签名、归档或类型清单校验未通过，请检查本地文件。', INVALID_METADATA: '请选择有效的已签名发行 JSON，不要上传私钥。', INPUT_TOO_LARGE: '元数据应不超过 1 MiB，ZIP 应不超过 10 MiB。', ARCHIVE_SIZE_MISMATCH: '归档大小与签名记录不符。', ARCHIVE_HASH_MISMATCH: '归档 SHA-256 与签名记录不符。',
     INVALID_RESPONSE: '服务响应格式不正确，请核对服务状态。', FILE_NOT_FOUND: '文件不在当前已校验的归档中，请刷新审核详情。', RECEIPT_MISMATCH: '返回回执与原操作不匹配，结果待核对。', OPERATION_ID_REUSED: '原编号已用于不同内容，请先核对原操作。', REQUEST_TIMEOUT: '等待已超时，写入结果可能尚未确认。',
   }

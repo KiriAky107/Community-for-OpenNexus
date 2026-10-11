@@ -3,8 +3,10 @@ import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef } from 'vue
 import { CatalogError } from './api.ts'
 import { freezeIntent, localPackage, WorkbenchClient, workbenchMessage } from './workbenchClient.ts'
 import { stateNames } from './workbenchTypes.ts'
-import type { BrowserSession, CursorPage, Detail, Intent, Page, Preview, Receipt, Report, Session, TextDifference } from './workbenchTypes.ts'
+import type { AuditEntry, AuditFilters, BrowserSession, CursorPage, Detail, Intent, KeyPage, SigningKey, Page, Preview, Receipt, Report, Session, TextDifference } from './workbenchTypes.ts'
 import PackageInspection from './PackageInspection.vue'
+import AuditPanel from './AuditPanel.vue'
+import SigningKeys from './SigningKeys.vue'
 import logo from './assets/opennexus-logo.svg'
 
 type Pending = { intent: Intent; phase: 'confirm' | 'unknown' | 'missing'; tried: boolean; retryable: boolean }
@@ -13,7 +15,12 @@ const preview = shallowRef<Preview | null>(null), detail = shallowRef<Detail | n
 const reports = shallowRef<CursorPage<Report> | null>(null), sessions = shallowRef<BrowserSession[]>([])
 const token = ref(''), busy = ref(false), error = ref(''), notice = ref(''), reason = ref(''), accepted = ref(false)
 const revokeChoice = ref<string | null>(null)
-const tab = ref<'submissions' | 'reviews' | 'reports' | 'sessions'>('submissions'), selectedReport = shallowRef<Report | null>(null)
+const tab = ref<'submissions' | 'reviews' | 'reports' | 'sessions' | 'audit' | 'keys'>('submissions'), selectedReport = shallowRef<Report | null>(null)
+const auditPage = shallowRef<CursorPage<AuditEntry> | null>(null), keys = shallowRef<KeyPage | null>(null), selectedKey = shallowRef<SigningKey | null>(null)
+const auditFilters = ref<AuditFilters>({ q: '', actor: '', action: '', subject: '' }), auditTrail = ref([Number.MAX_SAFE_INTEGER])
+let appliedAudit: AuditFilters = { ...auditFilters.value }
+const keyQuery = ref({ q: '', state: '' })
+let appliedKeys = { ...keyQuery.value }
 const metadataFile = shallowRef<File | null>(null), archiveFile = shallowRef<File | null>(null)
 const metadataInput = ref<HTMLInputElement>(), archiveInput = ref<HTMLInputElement>(), confirmation = ref<HTMLElement>()
 const prepared = shallowRef<{ url: string; name: string } | null>(null)
@@ -27,6 +34,7 @@ function clearDownload() { if (prepared.value) URL.revokeObjectURL(prepared.valu
 function clearFiles() { bundle = null; preview.value = null; metadataFile.value = null; archiveFile.value = null; if (metadataInput.value) metadataInput.value.value = ''; if (archiveInput.value) archiveInput.value.value = '' }
 function clearActor() {
   generation++; page.value = null; detail.value = null; reports.value = null; sessions.value = []; selectedReport.value = null; revokeChoice.value = null; reason.value = ''; token.value = ''; accepted.value = false; clearFiles(); clearDownload()
+  auditPage.value = null; keys.value = null; selectedKey.value = null; auditFilters.value = { q: '', actor: '', action: '', subject: '' }; appliedAudit = { ...auditFilters.value }; auditTrail.value = [Number.MAX_SAFE_INTEGER]; keyQuery.value = { q: '', state: '' }; appliedKeys = { ...keyQuery.value }
   // On expiry keep only the original receipt reference, never an old actor's package payload.
   if (pending.value?.tried) { const original = pending.value.intent; pending.value = { intent: Object.freeze({ ...original, body: Object.freeze({ expected_sha256: original.body.expected_sha256, approve: original.body.approve, decision: original.body.decision }) }), phase: 'unknown', tried: true, retryable: false } }
   else pending.value = null
@@ -49,8 +57,32 @@ async function connect() {
 async function loadPage(offset = 0) { await read(async () => { clearDownload(); page.value = await client.page(tab.value === 'reviews', offset) }) }
 async function chooseTab(value: typeof tab.value) {
   if (locked.value) return
-  tab.value = value; detail.value = null; selectedReport.value = null; reason.value = ''; clearDownload()
+  tab.value = value; detail.value = null; selectedReport.value = null; selectedKey.value = null; reason.value = ''; clearDownload()
+  if (value === 'keys') { await loadKeys(0, true); return }
+  if (value === 'audit') { await loadAudit('refresh'); return }
   await read(async () => { if (value === 'sessions') sessions.value = await client.sessions(); else if (value === 'reports') reports.value = await client.reports(); else page.value = await client.page(value === 'reviews') })
+}
+async function loadAudit(mode: 'search' | 'next' | 'back' | 'refresh') {
+  if (locked.value) return
+  if (mode === 'search') appliedAudit = { ...auditFilters.value }
+  let trail = [...auditTrail.value]
+  if (mode === 'search' || mode === 'refresh') trail = [Number.MAX_SAFE_INTEGER]
+  else if (mode === 'next' && auditPage.value?.next_cursor) trail.push(auditPage.value.next_cursor)
+  else if (mode === 'back' && trail.length > 1) trail.pop()
+  else return
+  auditPage.value = null
+  await read(async () => { auditPage.value = await client.audit(appliedAudit, trail.at(-1)!); auditTrail.value = trail })
+}
+async function loadKeys(offset = 0, search = false) {
+  if (locked.value) return
+  if (search) appliedKeys = { ...keyQuery.value }
+  selectedKey.value = null; keys.value = null; reason.value = ''
+  await read(async () => { keys.value = await client.keys(appliedKeys.q, appliedKeys.state, offset) })
+}
+function selectKey(key: SigningKey) { if (!locked.value) { selectedKey.value = key; reason.value = '' } }
+function revokeKey() {
+  const key = selectedKey.value
+  if (key && !key.revoked && session.value?.role === 'moderator' && reason.value.trim()) void stage('revoke-key', key.key_id, '撤销签名公钥', `/catalog/v1/keys/${encodeURIComponent(key.key_id)}/revoke`, { reason: reason.value.trim(), expected_sha256: key.review_digest })
 }
 async function inspect(id: string, offset = 0) {
   if (locked.value) return
@@ -105,6 +137,7 @@ async function confirmed(receipt: Receipt) {
   notice.value = `${original?.label || '原操作'}已确认 · ${receipt.operation_id}`
   if (original?.kind === 'submit') { clearFiles(); tab.value = 'submissions'; page.value = await client.page(); if (receipt.submission_id) detail.value = await client.detail(receipt.submission_id) }
   else if (original?.kind === 'resolve-report') { selectedReport.value = null; reports.value = await client.reports() }
+  else if (original?.kind === 'revoke-key') { selectedKey.value = null; keys.value = await client.keys(appliedKeys.q, appliedKeys.state, keys.value?.offset || 0) }
   else if (detail.value) { detail.value = await client.detail(detail.value.submission_id); page.value = await client.page(tab.value === 'reviews') }
 }
 async function execute() {
@@ -118,7 +151,7 @@ async function execute() {
       pending.value = null; accepted.value = false
       clearDownload()
       // Preserve the rejection reason while refreshing only the affected read state.
-      try { if (detail.value) detail.value = await client.detail(detail.value.submission_id); if (session.value) page.value = await client.page(tab.value === 'reviews') } catch { /* Original failure remains visible. */ }
+      try { if (operation.kind === 'revoke-key') { selectedKey.value = null; keys.value = await client.keys(appliedKeys.q, appliedKeys.state, keys.value?.offset || 0) } else { if (detail.value) detail.value = await client.detail(detail.value.submission_id); if (session.value) page.value = await client.page(tab.value === 'reviews') } } catch { /* Original failure remains visible. */ }
     }
   } finally { busy.value = false }
 }
@@ -164,16 +197,18 @@ onUnmounted(() => { window.removeEventListener('beforeunload', beforeUnload); cl
     <template v-else>
       <section class="wb-session"><div><strong>{{ session.principal_id }}</strong><span>{{ session.role === 'author' ? '作者' : '审核员' }}{{ session.namespace ? ` · ${session.namespace}` : '' }}</span><small>到期 {{ time(session.expires_at) }}</small></div><button :disabled="logoutBlocked" @click="logout">退出</button></section>
       <p v-if="pending && !matched" class="banner warning">有其他身份的原操作待核对。请使用原身份重新登录，当前身份不能访问原回执。</p>
-      <nav class="wb-tabs" aria-label="工作台"><button :class="{ chosen: tab === 'submissions' }" :disabled="locked" @click="chooseTab('submissions')">{{ session.role === 'author' ? '我的提交' : '全部提交' }}</button><button v-if="session.role === 'moderator'" :class="{ chosen: tab === 'reviews' }" :disabled="locked" @click="chooseTab('reviews')">待审核</button><button v-if="session.role === 'moderator'" :class="{ chosen: tab === 'reports' }" :disabled="locked" @click="chooseTab('reports')">举报处理</button><button :class="{ chosen: tab === 'sessions' }" :disabled="locked" @click="chooseTab('sessions')">我的会话</button></nav>
+      <nav class="wb-tabs" aria-label="工作台"><button :class="{ chosen: tab === 'submissions' }" :disabled="locked" @click="chooseTab('submissions')">{{ session.role === 'author' ? '我的提交' : '全部提交' }}</button><button v-if="session.role === 'moderator'" :class="{ chosen: tab === 'reviews' }" :disabled="locked" @click="chooseTab('reviews')">待审核</button><button v-if="session.role === 'moderator'" :class="{ chosen: tab === 'reports' }" :disabled="locked" @click="chooseTab('reports')">举报处理</button><button v-if="session.role === 'moderator'" :class="{ chosen: tab === 'audit' }" :disabled="locked" @click="chooseTab('audit')">审计</button><button :class="{ chosen: tab === 'keys' }" :disabled="locked" @click="chooseTab('keys')">公钥</button><button :class="{ chosen: tab === 'sessions' }" :disabled="locked" @click="chooseTab('sessions')">我的会话</button></nav>
       <section v-if="session.role === 'author' && tab === 'submissions' && !pending" class="wb-card"><div class="section-heading"><h2>准备新发行</h2><span class="muted">只读预检</span></div><div class="wb-upload"><label>已签名元数据 JSON<input ref="metadataInput" type="file" accept=".json,application/json" :disabled="locked" @change="chooseFile($event, 'metadata')"></label><label>原始 ZIP<input ref="archiveInput" type="file" accept=".zip,application/zip" :disabled="locked" @change="chooseFile($event, 'archive')"></label></div><p class="muted">JSON ≤ 1 MiB，ZIP ≤ 10 MiB。先核对本地哈希，再由服务验证签名与类型清单。</p><button :disabled="locked || !metadataFile || !archiveFile" @click="preflight">检查签名与归档</button><template v-if="preview"><PackageInspection :release="preview.release" :inspection="preview.inspection" :busy="locked"/><button class="primary" :disabled="locked" @click="submit">审阅后提交</button></template></section>
       <section v-if="tab === 'submissions' || tab === 'reviews'" class="wb-grid">
         <aside class="wb-card wb-list"><div class="section-heading"><h2>{{ tab === 'reviews' ? '待审核' : '提交记录' }} · {{ page?.total || 0 }}</h2><button :disabled="locked" @click="loadPage(page?.offset || 0)">刷新</button></div><p v-if="!page?.items.length" class="muted">{{ busy ? '正在读取…' : '此页暂无提交' }}</p><button v-for="item in page?.items" :key="item.submission_id" class="wb-item" :class="{ chosen: detail?.submission_id === item.submission_id }" :disabled="locked" @click="inspect(item.submission_id)"><strong>{{ item.release.name }}</strong><small>{{ item.release.namespace }}/{{ item.release.package_id }}</small><span>{{ item.release.version }} · {{ stateNames[item.state] }}</span></button><nav v-if="page" class="pagination compact" aria-label="提交分页"><button :disabled="locked || !page.offset" @click="loadPage(Math.max(0, page.offset - 20))">上一页</button><span>{{ Math.floor(page.offset / 20) + 1 }}</span><button :disabled="locked || page.offset + page.limit >= page.total" @click="loadPage(page.offset + page.limit)">下一页</button></nav></aside>
         <article class="wb-card"><template v-if="detail"><div class="section-heading"><strong>{{ stateNames[detail.state] }}</strong><button :disabled="locked" @click="inspect(detail.submission_id, detail.inspection.file_page.offset)">更新详情</button></div><PackageInspection :release="detail.release" :inspection="detail.inspection" :previous="detail.previous" :text-review="textReview" :busy="locked" paged @page="inspect(detail.submission_id, $event)" @text="inspectText"/><div class="wb-actions"><button :disabled="locked" @click="download">校验原 ZIP</button><a v-if="prepared" class="save-archive" :href="prepared.url" :download="prepared.name">保存已校验 ZIP</a></div><section v-if="detail.decisions.length" class="detail-section"><h3>最近的处理记录</h3><div v-for="decision in detail.decisions" :key="decision.id" class="wb-decision"><strong>{{ decision.action }} · {{ decision.actor }}</strong><small>{{ time(decision.timestamp) }}</small><p>{{ decision.reason || '无补充原因' }}</p></div></section><section class="detail-section"><label>处理或举报原因<textarea v-model="reason" rows="3" maxlength="2000" :disabled="locked" placeholder="说明审阅依据或具体问题"></textarea></label><div class="wb-actions"><template v-if="session.role === 'moderator' && detail.state === 'pending'"><button class="primary" :disabled="locked || !reason.trim() || detail.inspection.signer_revoked || detail.release.author_id === session.principal_id" @click="review(true)">批准发布</button><button :disabled="locked || !reason.trim() || detail.release.author_id === session.principal_id" @click="review(false)">拒绝提交</button></template><button v-if="detail.state === 'published'" :disabled="locked || !reason.trim()" @click="withdraw">撤回发行</button><button v-if="detail.state === 'published'" :disabled="locked || !reason.trim()" @click="report">举报发行</button></div></section></template><div v-else class="empty"><h2>选择一个提交</h2><p>核对原始说明、实际文件和前一发布的变化。</p></div></article>
       </section>
       <section v-else-if="tab === 'reports'" class="wb-grid"><aside class="wb-card wb-list"><div class="section-heading"><h2>待处理举报</h2><button :disabled="locked" @click="loadReports()">刷新</button></div><p v-if="!reports?.items.length" class="muted">此页暂无举报</p><button v-for="entry in reports?.items" :key="entry.id" class="wb-item" :class="{ chosen: selectedReport?.id === entry.id }" :disabled="locked" @click="selectReport(entry)"><strong>#{{ entry.id }} · {{ entry.actor }}</strong><small>{{ entry.release_id }}</small><span>{{ entry.reason }}</span></button><button :disabled="locked || reports?.next_cursor == null" @click="loadReports(reports?.next_cursor || 0)">下一页举报</button></aside><article class="wb-card"><template v-if="selectedReport"><h2>举报 #{{ selectedReport.id }}</h2><p class="package-id">发行 {{ selectedReport.release_id }} · {{ time(selectedReport.timestamp) }}</p><pre class="changelog">{{ selectedReport.reason }}</pre><template v-if="detail"><PackageInspection :release="detail.release" :inspection="detail.inspection" :previous="detail.previous" :text-review="textReview" :busy="locked" paged @page="inspect(detail.submission_id, $event)" @text="inspectText"/><div class="wb-actions"><button :disabled="locked" @click="download">校验原 ZIP</button><a v-if="prepared" class="save-archive" :href="prepared.url" :download="prepared.name">保存已校验 ZIP</a><button v-if="detail.state === 'published'" :disabled="locked || !reason.trim()" @click="withdraw">撤回发行</button></div></template><label>处理原因<textarea v-model="reason" rows="4" maxlength="2000" :disabled="locked"></textarea></label><div class="wb-actions"><button class="primary" :disabled="locked || !reason.trim()" @click="resolve('addressed')">标记已处理</button><button :disabled="locked || !reason.trim()" @click="resolve('dismissed')">驳回举报</button></div></template><p v-else class="empty">选择举报并填写处理原因。</p></article></section>
+      <AuditPanel v-else-if="tab === 'audit' && session.role === 'moderator'" :page="auditPage" :filters="auditFilters" :busy="locked" :previous="auditTrail.length > 1" @search="loadAudit('search')" @refresh="loadAudit('refresh')" @next="loadAudit('next')" @back="loadAudit('back')" />
+      <SigningKeys v-else-if="tab === 'keys'" :page="keys" :selected="selectedKey" :query="keyQuery" v-model:reason="reason" :moderator="session.role === 'moderator'" :busy="locked" @search="loadKeys(0, true)" @page="loadKeys($event)" @select="selectKey" @revoke="revokeKey" />
       <section v-else class="wb-card"><div class="section-heading"><h2>我的有效会话 · {{ sessions.length }}/8</h2><button :disabled="locked" @click="read(async () => { sessions = await client.sessions() })">刷新</button></div><p class="muted">只列出当前身份的会话。撤销当前会话会退出此页面。</p><div v-for="entry in sessions" :key="entry.id" class="wb-session-row"><div><strong>{{ entry.current ? '当前浏览器' : '其他浏览器' }}</strong><code>{{ entry.id }}</code><small>创建 {{ time(entry.issued_at) }} · 到期 {{ time(entry.expires_at) }}</small></div><button :disabled="locked" @click="revokeChoice = entry.id">撤销会话</button></div><div v-if="revokeChoice" class="banner warning"><span>确认撤销会话 {{ revokeChoice }}？</span><div class="wb-actions"><button :disabled="locked" @click="revoke">确认撤销</button><button :disabled="locked" @click="revokeChoice = null">取消</button></div></div></section>
     </template>
-    <section v-if="pending && matched" ref="confirmation" class="wb-card wb-confirm" tabindex="-1" aria-label="原操作确认"><p class="eyebrow">{{ pending.phase === 'confirm' ? 'Review & confirm' : 'Reconcile original operation' }}</p><h2>{{ pending.intent.label }}</h2><p class="package-id">{{ pending.intent.target }}</p><dl v-if="pending.intent.kind === 'submit' && preview" class="facts"><dt>作者与许可</dt><dd>{{ preview.release.author_id }} · {{ preview.release.license }}</dd><dt>声明权限</dt><dd>{{ preview.release.permissions.join(', ') || '无' }}</dd><dt>原归档 SHA-256</dt><dd><code>{{ preview.inspection.archive_sha256 }}</code></dd></dl><p>原操作编号 <code>{{ pending.intent.operation_id }}</code></p><p v-if="pending.intent.body.reason" class="prose">{{ pending.intent.body.reason }}</p><p v-if="pending.phase === 'unknown'" class="banner warning">写入结果尚未确认。先查询原编号；找到回执后不会再次写入。</p><p v-if="pending.phase === 'missing' && !pending.retryable" class="banner warning">原会话失效后已清空正文，只保留回执编号。可继续查询原结果；如需重试，请将原内容与原编号交由管理员核对。</p><label v-if="pending.phase !== 'unknown' && pending.retryable" class="wb-check"><input v-model="accepted" type="checkbox" :disabled="busy">我已审阅上述内容，确认以此原编号执行。</label><div class="wb-actions"><button v-if="pending.phase !== 'unknown' && pending.retryable" class="primary" :disabled="busy || !accepted" @click="execute">{{ pending.tried ? '按原编号与原内容重试' : '确认执行' }}</button><button v-if="pending.tried" :disabled="busy" @click="reconcile">只读查询原编号</button><button v-if="!pending.tried" :disabled="busy" @click="pending = null; accepted = false">返回修改</button></div></section>
+    <section v-if="pending && matched" ref="confirmation" class="wb-card wb-confirm" tabindex="-1" aria-label="原操作确认"><p class="eyebrow">{{ pending.phase === 'confirm' ? 'Review & confirm' : 'Reconcile original operation' }}</p><h2>{{ pending.intent.label }}</h2><p class="package-id">{{ pending.intent.target }}</p><dl v-if="pending.intent.kind === 'submit' && preview" class="facts"><dt>作者与许可</dt><dd>{{ preview.release.author_id }} · {{ preview.release.license }}</dd><dt>声明权限</dt><dd>{{ preview.release.permissions.join(', ') || '无' }}</dd><dt>原归档 SHA-256</dt><dd><code>{{ preview.inspection.archive_sha256 }}</code></dd></dl><template v-if="pending.intent.kind === 'revoke-key'"><p class="banner warning">确认撤销上述目标公钥。使用该公钥的发行将不能再提交、批准或下载；原发行与已应用数据保留。</p><p>冻结状态摘要 <code>{{ pending.intent.body.expected_sha256 }}</code></p></template><p>原操作编号 <code>{{ pending.intent.operation_id }}</code></p><p v-if="pending.intent.body.reason" class="prose">{{ pending.intent.body.reason }}</p><p v-if="pending.phase === 'unknown'" class="banner warning">写入结果尚未确认。先查询原编号；找到回执后不会再次写入。</p><p v-if="pending.phase === 'missing' && !pending.retryable" class="banner warning">原会话失效后已清空正文，只保留回执编号。可继续查询原结果；如需重试，请将原内容与原编号交由管理员核对。</p><label v-if="pending.phase !== 'unknown' && pending.retryable" class="wb-check"><input v-model="accepted" type="checkbox" :disabled="busy">我已审阅上述内容，确认以此原编号执行。</label><div class="wb-actions"><button v-if="pending.phase !== 'unknown' && pending.retryable" class="primary" :disabled="busy || !accepted" @click="execute">{{ pending.tried ? '按原编号与原内容重试' : '确认执行' }}</button><button v-if="pending.tried" :disabled="busy" @click="reconcile">只读查询原编号</button><button v-if="!pending.tried" :disabled="busy" @click="pending = null; accepted = false">返回修改</button></div></section>
     <p v-if="busy" class="wb-working" role="status">正在等待服务结果…</p>
   </main><footer><span>OpenNexus Community</span><span>签名内容 · 独立审核 · 原操作回执</span></footer>
 </template>

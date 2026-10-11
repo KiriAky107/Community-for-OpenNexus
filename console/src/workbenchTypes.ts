@@ -21,9 +21,13 @@ export interface Preview { state: 'validated'; release: Metadata; inspection: In
 export interface Report { id: number; actor: string; release_id: string; reason: string; timestamp: number; review_digest: string }
 export interface CursorPage<T> { items: T[]; next_cursor: number | null }
 export interface BrowserSession { id: string; issued_at: number; expires_at: number; current: boolean }
-export type Kind = 'submit' | 'review' | 'withdraw' | 'report' | 'resolve-report'
+export interface AuditEntry { id: number; actor: string; action: string; subject: string; reason: string; timestamp: number }
+export interface AuditFilters { q: string; actor: string; action: string; subject: string }
+export interface SigningKey { key_id: string; namespace: string; public_key: string; revoked: boolean; fingerprint: string; review_digest: string }
+export interface KeyPage { total: number; offset: number; limit: number; items: SigningKey[]; observed_at: number }
+export type Kind = 'submit' | 'review' | 'withdraw' | 'report' | 'resolve-report' | 'revoke-key'
 export interface Intent { principal_id: string; kind: Kind; target: string; operation_id: string; label: string; path: string; body: Readonly<Record<string, unknown>> }
-export interface Receipt { schema_version: 1; operation_id: string; state: string; kind?: Kind; target?: string; confirmed_at?: number; submission_id?: string; release_id?: string; report_id?: number; decision?: string; review_digest?: string }
+export interface Receipt { schema_version: 1; operation_id: string; state: string; kind?: Kind; target?: string; confirmed_at?: number; submission_id?: string; release_id?: string; report_id?: number; decision?: string; review_digest?: string; key_id?: string }
 
 export const stateNames: Record<State, string> = { pending: '待审核', published: '已发布', rejected: '已拒绝', withdrawn: '已撤回' }
 export function object(value: unknown): Record<string, unknown> { if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('INVALID_RESPONSE'); return value as Record<string, unknown> }
@@ -104,11 +108,24 @@ export function parseReports(value: unknown): CursorPage<Report> {
   return { next_cursor: item.next_cursor === null ? null : integer(item.next_cursor), items: array(item.items, 100).map(raw => { const entry = object(raw); return { id: integer(entry.id), actor: text(entry.actor, 80), release_id: id(entry.release_id), reason: text(entry.reason, 2000), timestamp: integer(entry.timestamp), review_digest: hash(entry.review_digest) } }) }
 }
 export function parseSessions(value: unknown): BrowserSession[] { const item = schema(value); return array(item.items, 8).map(raw => { const entry = object(raw); return { id: id(entry.id), issued_at: integer(entry.issued_at), expires_at: integer(entry.expires_at), current: bool(entry.current) } }) }
+export function parseAudit(value: unknown): CursorPage<AuditEntry> {
+  const item = schema(value)
+  return { next_cursor: item.next_cursor === null ? null : integer(item.next_cursor), items: array(item.items, 100).map(raw => { const entry = object(raw); return { id: integer(entry.id), actor: text(entry.actor, 160), action: text(entry.action, 160), subject: text(entry.subject, 512), reason: text(entry.reason, 16000), timestamp: integer(entry.timestamp) } }) }
+}
+export function parseKeys(value: unknown): KeyPage {
+  const item = schema(value), page = pageShape(item)
+  if (page.offset > 2147483647 || page.total < page.items.length) throw new Error('INVALID_RESPONSE')
+  return { ...page, observed_at: integer(item.observed_at), items: page.items.map(raw => {
+    const entry = object(raw), key_id = text(entry.key_id, 160), namespace = text(entry.namespace, 128), public_key = text(entry.public_key, 44)
+    if (!key_id || !namespace || !/^[A-Za-z0-9+/]{43}=$/.test(public_key) || atob(public_key).length !== 32 || btoa(atob(public_key)) !== public_key) throw new Error('INVALID_RESPONSE')
+    return { key_id, namespace, public_key, revoked: bool(entry.revoked), fingerprint: hash(entry.fingerprint), review_digest: hash(entry.review_digest) }
+  }) }
+}
 export function parseReceipt(value: unknown): Receipt { const item = schema(value); text(item.operation_id, 32); text(item.state, 30); return item as unknown as Receipt }
 export function validateReceipt(value: Receipt, intent: Intent): Receipt {
   if (value.operation_id !== intent.operation_id) throw new Error('RECEIPT_MISMATCH')
   if (value.state === 'not_found') return value
-  const states = { submit: 'pending', review: intent.body.approve ? 'published' : 'rejected', withdraw: 'withdrawn', report: 'reported', 'resolve-report': 'resolved' }
+  const states = { submit: 'pending', review: intent.body.approve ? 'published' : 'rejected', withdraw: 'withdrawn', report: 'reported', 'resolve-report': 'resolved', 'revoke-key': 'revoked' }
   if (value.kind !== intent.kind || value.target !== intent.target || value.state !== states[intent.kind]) throw new Error('RECEIPT_MISMATCH')
   integer(value.confirmed_at)
   if (intent.kind === 'submit') { id(value.submission_id); if (value.review_digest !== intent.body.expected_sha256) throw new Error('RECEIPT_MISMATCH') }
@@ -116,5 +133,6 @@ export function validateReceipt(value: Receipt, intent: Intent): Receipt {
   if (['withdraw', 'report'].includes(intent.kind) && value.release_id !== intent.target) throw new Error('RECEIPT_MISMATCH')
   if (intent.kind === 'report') integer(value.report_id)
   if (intent.kind === 'resolve-report' && (String(value.report_id) !== intent.target || value.decision !== intent.body.decision)) throw new Error('RECEIPT_MISMATCH')
+  if (intent.kind === 'revoke-key' && value.key_id !== intent.target) throw new Error('RECEIPT_MISMATCH')
   return value
 }
