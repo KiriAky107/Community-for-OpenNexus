@@ -34,6 +34,12 @@
 .wb-files { list-style: none; padding: 0; margin: 0; max-height: 360px; overflow: auto; }
 .wb-files li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; border-bottom: 1px solid var(--line); padding: 12px 0; overflow-wrap: anywhere; font-size: 12px; }
 .wb-files code { grid-column: 1 / -1; color: var(--muted); font-size: 10px; }
+.wb-files button { justify-self: start; }
+.wb-text-sides { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.wb-text-sides > * { min-width: 0; }
+.wb-key-changes > section { border-left: 2px solid var(--line); padding-left: 12px; margin: 16px 0; }
+.wb-key-changes h4, .wb-text-review h4 { overflow-wrap: anywhere; }
+@media (max-width: 720px) { .wb-text-sides { grid-template-columns: 1fr; } }
 .wb-decision { padding: 12px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
 .wb-decision strong, .wb-decision small { display: block; font-size: 12px; }
 .wb-decision small { color: var(--muted); margin-top: 8px; }

@@ -11,6 +11,8 @@ DIFF_BYTES = 32768
 EXTENSIONS = {'.txt', '.md', '.json', '.yaml', '.yml', '.toml', '.csv', '.py', '.js', '.ts',
               '.css', '.html', '.xml', '.ini', '.conf', '.sh', '.ps1'}
 KEY_FIELDS = ('type', 'license', 'min_app_version', 'max_app_version', 'platforms', 'architectures', 'dependencies')
+MANIFEST_FIELDS = ('schema_version', 'version', 'permissions', 'system_prompt', 'name', 'defaults', 'content',
+                   'environment', 'inputs', 'steps', 'outputs', 'files', 'entrypoint', 'model', 'server')
 
 
 def key_changes(before, after, fields=KEY_FIELDS):
@@ -34,7 +36,8 @@ def manifest_changes(before, after):
         if not isinstance(a, dict) or not isinstance(b, dict): raise ValueError()
     except (ValueError, UnicodeError):
         return {'status': 'unsupported_format', 'total': 0, 'items': []}
-    fields = sorted(a.keys() | b.keys())
+    keys = a.keys() | b.keys()
+    fields = [field for field in MANIFEST_FIELDS if field in keys] + sorted(keys - set(MANIFEST_FIELDS))
     changes = key_changes(a, b, fields)
     return {'status': 'available', 'total': len(changes), 'items': changes[:40]}
 

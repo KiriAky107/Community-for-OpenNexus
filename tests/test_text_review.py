@@ -108,3 +108,5 @@ def test_first_release_text_and_manifest_summary_bounds(env):
     result = manifest_changes(b'{}', json.dumps({str(i): 'x' * 3000 if i == 0 else i for i in range(45)}).encode())
     assert result['total'] == 45 and len(result['items']) == 40
     assert result['items'][0]['after']['truncated'] and len(result['items'][0]['after']['value']) == 2048
+    result = manifest_changes(b'{"system_prompt":"old"}', json.dumps({'system_prompt': 'new', **{str(i): i for i in range(45)}}).encode())
+    assert result['items'][0]['field'] == 'system_prompt'

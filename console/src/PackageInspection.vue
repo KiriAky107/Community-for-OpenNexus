@@ -1,9 +1,14 @@
 <script setup lang="ts">
+import { nextTick, ref, watch } from 'vue'
 import { typeNames } from './types.ts'
 import type { Metadata } from './types.ts'
-import type { Inspection, Previous } from './workbenchTypes.ts'
-defineProps<{ release: Metadata; inspection: Inspection; previous?: Previous | null; busy: boolean; paged?: boolean }>()
-defineEmits<{ page: [offset: number] }>()
+import type { Inspection, Previous, TextDifference } from './workbenchTypes.ts'
+import TextReview from './TextReview.vue'
+import KeyChanges from './KeyChanges.vue'
+const props = defineProps<{ release: Metadata; inspection: Inspection; previous?: Previous | null; textReview?: TextDifference | null; busy: boolean; paged?: boolean }>()
+defineEmits<{ page: [offset: number]; text: [path: string] }>()
+const textPanel = ref<HTMLElement>()
+watch(() => props.textReview, value => { if (value) void nextTick(() => { textPanel.value?.scrollIntoView({ block: 'start', behavior: 'smooth' }); textPanel.value?.focus({ preventScroll: true }) }) })
 const bytes = (value: number) => value < 1024 ? `${value} B` : `${(value / 1024).toFixed(1)} KiB`
 </script>
 
@@ -27,7 +32,7 @@ const bytes = (value: number) => value < 1024 ? `${value} B` : `${(value / 1024)
       <pre class="changelog wb-manifest">{{ inspection.manifest_text }}</pre>
     </section>
     <section class="detail-section"><h3>实际文件 · {{ inspection.file_page.total }}</h3>
-      <ul class="wb-files"><li v-for="file in inspection.file_page.items" :key="file.path"><strong>{{ file.path }}</strong><span>{{ bytes(file.bytes) }}</span><code>{{ file.sha256 }}</code></li></ul>
+      <ul class="wb-files"><li v-for="file in inspection.file_page.items" :key="file.path"><strong>{{ file.path }}</strong><span>{{ bytes(file.bytes) }}</span><code>{{ file.sha256 }}</code><button v-if="paged" :disabled="busy" :aria-label="`查看文本 ${file.path}`" @click="$emit('text', file.path)">查看文本</button></li></ul>
       <p v-if="!paged && inspection.file_page.total > inspection.file_page.items.length" class="warning">预检只展示前 100 个文件；提交后可分页查看全部文件。</p>
     </section>
     <section v-if="previous" class="detail-section"><h3>与前一发布的差异{{ previous.version ? ` · ${previous.version}` : '' }}</h3>
@@ -35,10 +40,16 @@ const bytes = (value: number) => value < 1024 ? `${value} B` : `${(value / 1024)
       <template v-else>
         <p>元数据变化：{{ previous.metadata_fields?.join(', ') || '无' }}</p>
         <p>新增权限：{{ previous.permissions_added?.join(', ') || '无' }}；移除权限：{{ previous.permissions_removed?.join(', ') || '无' }}</p>
-        <ul class="wb-files"><li v-for="change in previous.file_page?.items" :key="change.path"><strong>{{ change.path }}</strong><span>{{ { added: '新增', removed: '移除', changed: '修改' }[change.change] }}</span><code>{{ change.before?.sha256 || '无' }} → {{ change.after?.sha256 || '无' }}</code></li></ul>
+        <template v-if="previous.key_changes"><h4>兼容、依赖与许可关键变化</h4><KeyChanges :items="previous.key_changes"/></template>
+        <details v-if="previous.manifest_changes"><summary>类型清单关键变化 · {{ previous.manifest_changes.total }}</summary>
+          <template v-if="previous.manifest_changes.status === 'available'"><KeyChanges :items="previous.manifest_changes.items"/><p v-if="previous.manifest_changes.total > previous.manifest_changes.items.length" class="warning">仅展示前 40 个变化字段，共 {{ previous.manifest_changes.total }} 个；请核对完整清单文本。</p></template>
+          <p v-else class="warning">{{ previous.manifest_changes.status === 'too_large' ? '清单超过 32 KiB，未生成字段摘要。' : previous.manifest_changes.status === 'different_type' ? '清单类型不同，未生成字段摘要。' : '此清单格式使用纯文本审核，未生成 JSON 字段摘要。' }}</p>
+        </details>
+        <ul class="wb-files"><li v-for="change in previous.file_page?.items" :key="change.path"><strong>{{ change.path }}</strong><span>{{ { added: '新增', removed: '移除', changed: '修改' }[change.change] }}</span><code>{{ change.before?.sha256 || '无' }} → {{ change.after?.sha256 || '无' }}</code><button :disabled="busy" :aria-label="`查看差异 ${change.path}`" @click="$emit('text', change.path)">查看差异</button></li></ul>
         <p v-if="!previous.file_page?.total" class="muted">实际文件没有变化。</p>
       </template>
     </section>
+    <div v-if="textReview" ref="textPanel" tabindex="-1"><TextReview :value="textReview"/></div>
     <nav v-if="paged" class="pagination compact" aria-label="文件与差异分页">
       <button :disabled="busy || !inspection.file_page.offset" @click="$emit('page', Math.max(0, inspection.file_page.offset - 100))">前 100 项</button>
       <span>从 {{ inspection.file_page.offset + 1 }} 项起</span>

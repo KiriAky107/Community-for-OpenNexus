@@ -10,7 +10,12 @@ export interface FileEntry { path: string; bytes: number; sha256: string }
 export interface FilePage { total: number; offset: number; limit: number; items: FileEntry[] }
 export interface Inspection { files: number; expanded_size: number; manifest: string; manifest_text: string; manifest_truncated: boolean; archive_sha256: string; archive_bytes: number; review_digest: string; signer_revoked: boolean; signature_verified: true; file_page: FilePage }
 export interface Change { path: string; change: 'added' | 'removed' | 'changed'; before: FileEntry | null; after: FileEntry | null }
-export interface Previous { release_id: string; available: boolean; version?: string; metadata_fields?: string[]; permissions_added?: string[]; permissions_removed?: string[]; file_page?: { total: number; offset: number; limit: number; items: Change[] } }
+export interface KeyValue { present: boolean; value: string; truncated: boolean }
+export interface KeyChange { field: string; before: KeyValue; after: KeyValue }
+export interface ManifestChanges { status: 'available' | 'different_type' | 'too_large' | 'unsupported_format'; total: number; items: KeyChange[] }
+export interface Previous { release_id: string; available: boolean; version?: string; metadata_fields?: string[]; permissions_added?: string[]; permissions_removed?: string[]; key_changes?: KeyChange[]; manifest_changes?: ManifestChanges; file_page?: { total: number; offset: number; limit: number; items: Change[] } }
+export interface TextSide { status: 'text' | 'missing' | 'previous_unavailable' | 'unsupported_type' | 'too_large' | 'invalid_encoding' | 'binary' | 'too_many_lines'; file: FileEntry | null; text: string | null }
+export interface TextDifference { schema_version: 1; submission_id: string; review_digest: string; previous_release_id: string | null; path: string; limits: { text_bytes: number; text_lines: number; diff_bytes: number; diff_lines: number }; before: TextSide; after: TextSide; diff: { status: 'available' | 'unavailable'; unified: string; truncated: boolean } }
 export interface Detail extends Item { inspection: Inspection; previous: Previous | null; decisions: Decision[] }
 export interface Preview { state: 'validated'; release: Metadata; inspection: Inspection }
 export interface Report { id: number; actor: string; release_id: string; reason: string; timestamp: number; review_digest: string }
@@ -49,6 +54,30 @@ function pageShape(value: unknown) {
 export function parsePage(value: unknown): Page { const page = pageShape(schema(value)); return { ...page, items: page.items.map(parseItem) } }
 export function parseReviews(value: unknown): Page { const page = pageShape(schema(value)); return { ...page, items: page.items.map(raw => parseItem({ ...object(raw), state: 'pending' })) } }
 function file(value: unknown): FileEntry { const item = object(value); return { path: text(item.path, 65536), bytes: integer(item.bytes), sha256: hash(item.sha256) } }
+function keyChanges(value: unknown, max: number): KeyChange[] {
+  const render = (raw: unknown): KeyValue => { const item = object(raw); return { present: bool(item.present), value: text(item.value, 4096), truncated: bool(item.truncated) } }
+  return array(value, max).map(raw => { const item = object(raw); return { field: text(item.field, 32768), before: render(item.before), after: render(item.after) } })
+}
+function manifestChanges(value: unknown): ManifestChanges {
+  const item = object(value), status = text(item.status, 30) as ManifestChanges['status'], total = integer(item.total), items = keyChanges(item.items, 40)
+  if (!['available', 'different_type', 'too_large', 'unsupported_format'].includes(status) || total < items.length || (status !== 'available' && (total || items.length))) throw new Error('INVALID_RESPONSE')
+  return { status, total, items }
+}
+export function parseTextDifference(value: unknown): TextDifference {
+  const item = schema(value), limits = object(item.limits), diff = object(item.diff), path = text(item.path, 65536)
+  if (limits.text_bytes !== 32768 || limits.text_lines !== 1000 || limits.diff_bytes !== 32768 || limits.diff_lines !== 200) throw new Error('INVALID_RESPONSE')
+  const side = (raw: unknown): TextSide => {
+    const entry = object(raw), status = text(entry.status, 30) as TextSide['status']
+    if (!['text', 'missing', 'previous_unavailable', 'unsupported_type', 'too_large', 'invalid_encoding', 'binary', 'too_many_lines'].includes(status)) throw new Error('INVALID_RESPONSE')
+    const content = entry.text === null ? null : text(entry.text, 32768), original = entry.file === null ? null : file(entry.file)
+    if ((status === 'text') !== (content !== null) || (['missing', 'previous_unavailable'].includes(status)) !== (original === null) || (original && original.path !== path) || (status === 'text' && original!.bytes > 32768)) throw new Error('INVALID_RESPONSE')
+    return { status, file: original, text: content }
+  }
+  const before = side(item.before), after = side(item.after), status = text(diff.status, 20) as TextDifference['diff']['status'], unified = text(diff.unified, 32768), truncated = bool(diff.truncated)
+  const byteCount = new TextEncoder().encode(unified).length
+  if (!['available', 'unavailable'].includes(status) || byteCount > 32768 || (status === 'unavailable' && (unified || truncated)) || (status === 'available' && [before, after].some(side => !['text', 'missing'].includes(side.status)))) throw new Error('INVALID_RESPONSE')
+  return { schema_version: 1, submission_id: id(item.submission_id), review_digest: hash(item.review_digest), previous_release_id: item.previous_release_id === null ? null : id(item.previous_release_id), path, limits: { text_bytes: 32768, text_lines: 1000, diff_bytes: 32768, diff_lines: 200 }, before, after, diff: { status, unified, truncated } }
+}
 function parseInspection(value: unknown): Inspection {
   const item = object(value), page = pageShape(item.file_page)
   if (item.signature_verified !== true) throw new Error('INVALID_RESPONSE')
@@ -64,6 +93,8 @@ export function parseDetail(value: unknown): Detail {
     if (previous.available) {
       const page = pageShape(old.file_page)
       previous = { ...previous, version: text(old.version, 120), metadata_fields: strings(old.metadata_fields), permissions_added: strings(old.permissions_added), permissions_removed: strings(old.permissions_removed), file_page: { ...page, items: page.items.map(raw => { const entry = object(raw); if (!['added', 'removed', 'changed'].includes(entry.change as string)) throw new Error('INVALID_RESPONSE'); return { path: text(entry.path, 65536), change: entry.change as Change['change'], before: entry.before === null ? null : file(entry.before), after: entry.after === null ? null : file(entry.after) } }) } }
+      if (old.key_changes !== undefined) previous.key_changes = keyChanges(old.key_changes, 7)
+      if (old.manifest_changes !== undefined) previous.manifest_changes = manifestChanges(old.manifest_changes)
     }
   }
   return { ...base, inspection: parseInspection(item.inspection), previous, decisions: decisions(item.decisions) }

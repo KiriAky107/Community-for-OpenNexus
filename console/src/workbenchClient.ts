@@ -1,5 +1,5 @@
 import { bounded, CatalogError } from './api.ts'
-import { object, parseDetail, parseItem, parsePage, parsePreview, parseReceipt, parseReports, parseReviews, parseSession, parseSessions, validateReceipt } from './workbenchTypes.ts'
+import { object, parseDetail, parseItem, parsePage, parsePreview, parseReceipt, parseReports, parseReviews, parseSession, parseSessions, parseTextDifference, validateReceipt } from './workbenchTypes.ts'
 import type { Detail, Intent, Session } from './workbenchTypes.ts'
 import { parseMetadata } from './types.ts'
 import type { Metadata } from './types.ts'
@@ -74,6 +74,26 @@ export class WorkbenchClient {
   page(moderation = false, offset = 0) { return this.request(`/catalog/v1/${moderation ? 'moderation/reviews' : 'publish/submissions'}?offset=${offset}&limit=20`, moderation ? parseReviews : parsePage) }
   status(id: string) { return this.request(`/catalog/v1/publish/submissions/${encodeURIComponent(id)}`, parseItem) }
   detail(id: string, offset = 0) { return this.request(`/catalog/v1/publish/submissions/${encodeURIComponent(id)}/inspection?offset=${offset}&limit=100`, parseDetail) }
+  async textDifference(reviewed: Detail, path: string) {
+    const change = reviewed.previous?.file_page?.items.find(entry => entry.path === path)
+    const current = reviewed.inspection.file_page.items.find(entry => entry.path === path)
+    if (!change && !current) throw new CatalogError('FILE_NOT_FOUND', 404)
+    const ticket = this.generation
+    const query = new URLSearchParams({ path, expected_sha256: reviewed.inspection.review_digest, previous_release_id: reviewed.previous?.release_id || '' })
+    const result = await this.request(`/catalog/v1/publish/submissions/${encodeURIComponent(reviewed.submission_id)}/inspection/text?${query}`, parseTextDifference)
+    if (result.submission_id !== reviewed.submission_id || result.review_digest !== reviewed.inspection.review_digest || result.previous_release_id !== (reviewed.previous?.release_id || null) || result.path !== path) throw new CatalogError('REVIEW_CHANGED', 409)
+    const equal = (a: typeof current | null | undefined, b: typeof current | null) => a ? !!b && a.path === b.path && a.bytes === b.bytes && a.sha256 === b.sha256 : b === null
+    if (!equal(change ? change.after : current, result.after.file) || (change && reviewed.previous?.available && !equal(change.before, result.before.file))) throw new CatalogError('REVIEW_CHANGED', 409)
+    for (const side of [result.before, result.after]) {
+      if (side.status !== 'text') continue
+      const bytes = new TextEncoder().encode(side.text!)
+      const candidate = side.file!.bytes === bytes.length + 3 ? new Uint8Array([239, 187, 191, ...bytes]) : bytes
+      const digest = await crypto.subtle.digest('SHA-256', new Uint8Array(candidate).buffer)
+      if (ticket !== this.generation) throw new CatalogError('STALE_RESPONSE')
+      if (candidate.length !== side.file!.bytes || Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('') !== side.file!.sha256) throw new CatalogError('INVALID_RESPONSE')
+    }
+    return result
+  }
   preflight(release: Metadata, archive_base64: string) { return this.request('/catalog/v1/publish/preflight', parsePreview, { release, archive_base64 }) }
   reports(after = 0) { return this.request(`/catalog/v1/moderation/reports?after=${after}&limit=20`, parseReports) }
   async perform(intent: Intent) {
@@ -143,7 +163,7 @@ export function workbenchMessage(error: unknown): string {
     SESSION_LIMIT: '已达到八个有效会话，请在已登录页面撤销旧会话或等待到期。', SESSION_ALREADY_ACTIVE: '浏览器已有会话，请重新确认会话。', LOGIN_RATE_LIMIT: '登录尝试过多，请稍后再试。', CSRF_REQUIRED: '会话证明已变化，请重新确认会话。', ROLE_REQUIRED: '当前身份没有执行该操作的角色。', OWNERSHIP_REQUIRED: '当前身份没有访问这个提交的权限。', NAMESPACE_OWNERSHIP: '签名元数据的作者或命名空间与当前身份不一致。', UNTRUSTED_SIGNER: '签名公钥未登记或已撤销，无法提交或批准。', SELF_REVIEW_FORBIDDEN: '作者不能审核自己的提交，请由独立审核员处理。',
     IMMUTABLE_VERSION: '该版本已经提交，不能替换。请查看原状态或准备新的版本。', REVIEW_CHANGED: '检查内容已变化，请刷新详情后重新审核。', REVIEW_ALREADY_CLOSED: '这个提交已由另一操作处理，请刷新状态。', REPORT_ALREADY_RESOLVED: '这条举报已经处理，请刷新队列。', RELEASE_ALREADY_WITHDRAWN: '发行已撤回，请刷新状态。',
     PACKAGE_VALIDATION_FAILED: '签名、归档或类型清单校验未通过，请检查本地文件。', INVALID_METADATA: '请选择有效的已签名发行 JSON，不要上传私钥。', INPUT_TOO_LARGE: '元数据应不超过 1 MiB，ZIP 应不超过 10 MiB。', ARCHIVE_SIZE_MISMATCH: '归档大小与签名记录不符。', ARCHIVE_HASH_MISMATCH: '归档 SHA-256 与签名记录不符。',
-    INVALID_RESPONSE: '服务响应格式不正确，请核对服务状态。', RECEIPT_MISMATCH: '返回回执与原操作不匹配，结果待核对。', OPERATION_ID_REUSED: '原编号已用于不同内容，请先核对原操作。', REQUEST_TIMEOUT: '等待已超时，写入结果可能尚未确认。',
+    INVALID_RESPONSE: '服务响应格式不正确，请核对服务状态。', FILE_NOT_FOUND: '文件不在当前已校验的归档中，请刷新审核详情。', RECEIPT_MISMATCH: '返回回执与原操作不匹配，结果待核对。', OPERATION_ID_REUSED: '原编号已用于不同内容，请先核对原操作。', REQUEST_TIMEOUT: '等待已超时，写入结果可能尚未确认。',
   }
   return messages[code] || '暂时无法确认服务结果，请检查连接后重试读取。'
 }
