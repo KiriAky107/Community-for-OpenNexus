@@ -22,6 +22,7 @@ from .operations import readiness
 from .web import mount_web
 from .sessions import BrowserSessions, SessionError, SESSION_SCHEMA
 from .workbench import details, digest, inspection, receipt, release_digest, text_difference, TextReviewError
+from .management import audit_page as audit_query, key_page, key_state
 
 
 class CatalogError(Exception):
@@ -366,11 +367,20 @@ def create_app(registry: Registry, source_id="self-hosted", allowed_origins=(), 
             return {'schema_version': 1, 'total': total, 'offset': offset, 'limit': limit, 'items': [{'submission_id': row['id'], 'state': row['state'], 'release': json.loads(row['metadata'])} for row in rows]}
 
     @app.get('/catalog/v1/moderation/audit')
-    def audit_page(request: Request, after: int = Query(default=0, ge=0, le=9223372036854775807), limit: int = Query(default=30, ge=1, le=100), authorization: str = Header(default='')):
+    def audit_page(request: Request, after: int = Query(default=0, ge=0, le=9223372036854775807), before: int | None = Query(default=None, ge=1, le=9007199254740991), limit: int = Query(default=30, ge=1, le=100),
+                   actor: str = Query(default='', max_length=80), action: str = Query(default='', max_length=80), subject: str = Query(default='', max_length=256), q: str = Query(default='', max_length=120), authorization: str = Header(default='')):
+        if before is not None and after:
+            raise CatalogError(422, 'INVALID_REQUEST')
         with registry.connect(write=False) as conn:
             principal(conn, request, authorization, 'moderator')
-            rows = conn.execute('SELECT id,actor,action,subject,reason,timestamp FROM audit WHERE id>? ORDER BY id LIMIT ?', (after, limit + 1)).fetchall()
-            return {'schema_version': 1, 'items': [dict(row) for row in rows[:limit]], 'next_cursor': rows[limit - 1]['id'] if len(rows) > limit else None}
+            return audit_query(conn, after=after, before=before, limit=limit, actor=actor, action=action, subject=subject, q=q)
+
+    @app.get('/catalog/v1/publish/keys')
+    def signing_keys(request: Request, q: str = Query(default='', max_length=120), state: Literal['active', 'revoked'] | None = None,
+                     offset: int = Query(default=0, ge=0, le=2147483647), limit: int = Query(default=30, ge=1, le=100), authorization: str = Header(default='')):
+        with registry.connect(write=False) as conn:
+            actor = principal(conn, request, authorization)
+            return key_page(conn, actor, q=q, state=state, offset=offset, limit=limit)
 
     @app.get('/catalog/v1/moderation/reports')
     def report_queue(request: Request, after: int = Query(default=0, ge=0, le=9223372036854775807), limit: int = Query(default=30, ge=1, le=100), authorization: str = Header(default='')):
@@ -446,7 +456,14 @@ def create_app(registry: Registry, source_id="self-hosted", allowed_origins=(), 
         with registry.connect() as conn:
             actor = principal(conn, request, authorization, "moderator")
             def apply():
-                if not conn.execute('SELECT 1 FROM keys WHERE id=?', (key_id,)).fetchone(): raise CatalogError(404, 'KEY_NOT_FOUND')
+                key = conn.execute('SELECT id,namespace,public_key,revoked FROM keys WHERE id=?', (key_id,)).fetchone()
+                if not key: raise CatalogError(404, 'KEY_NOT_FOUND')
+                # Legacy clients remain compatible. New web confirmations bind
+                # this exact key state; stored original receipts win on retry.
+                if body.expected_sha256 is not None and body.expected_sha256 != key_state(key)['review_digest']:
+                    raise CatalogError(409, 'REVIEW_CHANGED')
+                if body.expected_sha256 is not None and key['revoked']:
+                    raise CatalogError(409, 'KEY_ALREADY_REVOKED')
                 conn.execute('UPDATE keys SET revoked=1 WHERE id=?', (key_id,))
                 audit(conn, actor['id'], 'revoke-key', key_id, body.reason)
                 return {'state': 'revoked', 'key_id': key_id}
