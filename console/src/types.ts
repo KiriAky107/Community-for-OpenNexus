@@ -12,6 +12,12 @@ export interface Metadata {
 }
 export interface Release extends Metadata { release_id: string; withdrawn: boolean; download_path: string }
 export interface Page { schema_version: 1; total: number; offset: number; limit: number; items: Release[] }
+export interface PackageGroup {
+  namespace: string; package_id: string; release: Release; version_count: number; matching_version_count: number; latest_version: string
+  availability: 'available' | 'withdrawn' | 'key_missing' | 'key_revoked' | 'invalid_version'
+  selection: 'latest' | 'earlier_available' | 'unavailable'
+}
+export interface GroupPage extends Omit<Page, 'items'> { items: PackageGroup[] }
 export interface SourceKey { key_id: string; namespace: string; public_key: string; revoked: boolean }
 export interface Sources { schema_version: 1; source_id: string; keys: SourceKey[] }
 export interface ReadResult<T> { data: T; freshness: 'network' | 'revalidated' | 'cached'; checkedAt: number }
@@ -52,6 +58,28 @@ export function parsePage(value: unknown): Page {
   record(value)
   if (value.schema_version !== 1 || !Number.isSafeInteger(value.total) || (value.total as number) < 0 || !Number.isSafeInteger(value.offset) || (value.offset as number) < 0 || !Number.isInteger(value.limit) || (value.limit as number) < 1 || (value.limit as number) > 100 || !Array.isArray(value.items) || value.items.length > (value.limit as number)) throw new Error('INVALID_RESPONSE')
   return { ...value, items: value.items.map(parseRelease) } as unknown as Page
+}
+export function parseGroupPage(value: unknown): GroupPage {
+  record(value)
+  if (!Array.isArray(value.items) || value.items.length > 100) throw new Error('INVALID_RESPONSE')
+  const items = value.items.map(raw => {
+    record(raw)
+    const release = parseRelease(raw.release)
+    string(raw.latest_version, 120)
+    if (raw.namespace !== release.namespace || raw.package_id !== release.package_id
+      || !Number.isSafeInteger(raw.version_count) || (raw.version_count as number) < 1
+      || !Number.isSafeInteger(raw.matching_version_count) || (raw.matching_version_count as number) < 1
+      || (raw.matching_version_count as number) > (raw.version_count as number)
+      || !['available', 'withdrawn', 'key_missing', 'key_revoked', 'invalid_version'].includes(raw.availability as string)
+      || !['latest', 'earlier_available', 'unavailable'].includes(raw.selection as string)
+      || (raw.availability === 'available') !== (raw.selection !== 'unavailable')
+      || raw.availability === 'available' && release.withdrawn
+      || raw.selection === 'latest' && raw.latest_version !== release.version
+      || raw.selection === 'earlier_available' && raw.latest_version === release.version) throw new Error('INVALID_RESPONSE')
+    return { ...raw, release } as unknown as PackageGroup
+  })
+  const page = parsePage({ ...value, items: items.map(item => item.release) })
+  return { ...page, items }
 }
 export function parseSources(value: unknown): Sources {
   record(value); string(value.source_id, 160)

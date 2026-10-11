@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { availability, CatalogClient, catalogUrl, detailUrl, message, versionsUrl } from './api.ts'
+import { availability, CatalogClient, detailUrl, groupsUrl, message, versionsUrl } from './api.ts'
+import type { Compatibility } from './api.ts'
 import { packageTypes, typeNames } from './types.ts'
-import type { PackageType, Page, ReadResult, Release, Sources } from './types.ts'
+import type { GroupPage, PackageGroup, PackageType, Page, ReadResult, Release, Sources } from './types.ts'
 import logo from './assets/opennexus-logo.svg'
 
 const client = new CatalogClient()
 const query = ref(''), kind = ref<PackageType | ''>(''), appliedQuery = ref(''), offset = ref(0)
 const appliedKind = ref<PackageType | ''>('')
-const page = ref<ReadResult<Page> | null>(null), versions = ref<ReadResult<Page> | null>(null)
+const filters = ref<Compatibility>({ app_version: '', platform: '', architecture: '' })
+const appliedFilters = ref<Compatibility>({ ...filters.value })
+const filterSummary = computed(() => Object.values(appliedFilters.value).filter(Boolean).join(' · '))
+const page = ref<ReadResult<GroupPage> | null>(null), versions = ref<ReadResult<Page> | null>(null)
 const selected = ref<ReadResult<Release> | null>(null), sources = ref<Sources | null>(null)
 const loading = ref(false), downloading = ref(false), error = ref(''), notice = ref('')
 const sourceError = ref(''), versionOffset = ref(0), path = ref(location.pathname)
@@ -29,7 +33,9 @@ const busy = computed(() => loading.value || downloading.value)
 const formatTime = (time: number) => new Date(time).toLocaleString('zh-CN', { hour12: false })
 const size = (bytes: number) => bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KiB`
 const freshness = (result: ReadResult<unknown>) => result.freshness === 'cached' ? '离线缓存' : result.freshness === 'revalidated' ? '已重新确认' : '实时读取'
-function cardState(release: Release): string {
+function cardState(group: PackageGroup): string {
+  const release = group.release
+  if (group.availability === 'invalid_version') return '版本声明无效'
   const status = availability(release, sources.value, page.value?.freshness !== 'cached')
   if (!status) return '可下载'
   if (status === '签名公钥已撤销') return '公钥已撤销'
@@ -46,18 +52,22 @@ async function load(): Promise<void> {
   const params = new URLSearchParams(location.search)
   const packageIdentity = identity.value
   if (!packageIdentity) document.title = 'OpenNexus Community'
-  const reads = packageIdentity ? client.page(versionsUrl(packageIdentity.namespace, packageIdentity.id, versionOffset.value)) : client.page(catalogUrl(appliedQuery.value, appliedKind.value, offset.value))
+  const reads = packageIdentity
+    ? client.page(versionsUrl(packageIdentity.namespace, packageIdentity.id, versionOffset.value)).then(result => ({ kind: 'releases' as const, result }))
+    : client.groups(groupsUrl(appliedQuery.value, appliedKind.value, offset.value, appliedFilters.value)).then(result => ({ kind: 'groups' as const, result }))
   const [listing, sourceRead] = await Promise.allSettled([reads, client.sources()])
   if (ticket !== generation) return
   if (sourceRead.status === 'fulfilled') sources.value = sourceRead.value.data
   else sourceError.value = '暂时无法确认公钥状态，下载已禁用。'
   if (listing.status === 'rejected') { error.value = message(listing.reason); loading.value = false; return }
-  if (!packageIdentity) { page.value = listing.value; loading.value = false; return }
-  versions.value = listing.value
+  if (listing.value.kind === 'groups') { page.value = listing.value.result; loading.value = false; return }
+  if (!packageIdentity) { loading.value = false; return }
+  const versionListing = listing.value.result
+  versions.value = versionListing
   const version = params.get('version') || ''
   try {
-    let item = listing.value.data.items.find(release => !version || release.version === version)
-    let itemRead = listing.value
+    let item = versionListing.data.items.find(release => !version || release.version === version)
+    let itemRead = versionListing
     if (version && !item) {
       itemRead = await client.page(versionsUrl(packageIdentity.namespace, packageIdentity.id, 0, version))
       item = itemRead.data.items[0]
@@ -77,6 +87,12 @@ function readLocation(): void {
   const type = params.get('type') as PackageType
   kind.value = packageTypes.includes(type) ? type : ''
   appliedKind.value = kind.value
+  filters.value = {
+    app_version: (params.get('app_version') || '').slice(0, 120),
+    platform: (params.get('platform') || '').slice(0, 80),
+    architecture: (params.get('architecture') || '').slice(0, 80),
+  }
+  appliedFilters.value = { ...filters.value }
   const start = Number(params.get('offset') || 0)
   offset.value = Number.isSafeInteger(start) && start >= 0 && start <= 2147483647 ? start : 0
   versionOffset.value = 0
@@ -85,9 +101,13 @@ function readLocation(): void {
 function search(start = -1): void {
   if (busy.value) return
   offset.value = Math.max(0, start)
-  if (start < 0) { appliedQuery.value = query.value.trim(); appliedKind.value = kind.value }
+  if (start < 0) {
+    appliedQuery.value = query.value.trim(); appliedKind.value = kind.value
+    appliedFilters.value = Object.fromEntries(Object.entries(filters.value).map(([key, value]) => [key, value.trim()])) as unknown as Compatibility
+  }
   const params = new URLSearchParams({ q: appliedQuery.value, offset: String(offset.value) })
   if (appliedKind.value) params.set('type', appliedKind.value)
+  for (const [key, value] of Object.entries(appliedFilters.value)) if (value) params.set(key, value)
   history.pushState(null, '', `/?${params}`)
   void load()
 }
@@ -134,9 +154,14 @@ onUnmounted(() => { generation++; clearPrepared(); window.removeEventListener('p
       <form class="search" @submit.prevent="search()">
         <label class="search-input"><span>搜索目录</span><input v-model="query" aria-label="搜索目录" maxlength="120" placeholder="名称或描述，例如：笔记、研究…" :disabled="busy" /></label>
         <label><span>类型</span><select v-model="kind" aria-label="扩展类型" :disabled="busy"><option value="">全部类型</option><option v-for="type in packageTypes" :key="type" :value="type">{{ typeNames[type] }}</option></select></label>
-        <button class="primary" type="submit" :disabled="busy">搜索</button><button type="button" :disabled="busy" @click="load">刷新</button>
+        <label class="compat-filter"><span>OpenNexus 版本</span><input v-model="filters.app_version" aria-label="OpenNexus 版本" maxlength="120" placeholder="例如 0.6.0-beta3" :disabled="busy" /></label>
+        <label class="compat-filter"><span>平台</span><input v-model="filters.platform" aria-label="平台" maxlength="80" list="platforms" placeholder="全部平台" :disabled="busy" /></label>
+        <label class="compat-filter"><span>架构</span><input v-model="filters.architecture" aria-label="架构" maxlength="80" list="architectures" placeholder="全部架构" :disabled="busy" /></label>
+        <datalist id="platforms"><option value="windows"/><option value="linux"/><option value="macos"/></datalist>
+        <datalist id="architectures"><option value="x86_64"/><option value="aarch64"/></datalist>
+        <div class="search-actions"><button class="primary" type="submit" :disabled="busy">搜索</button><button type="button" :disabled="busy" @click="load">刷新</button></div>
       </form>
-      <div v-if="page" class="results-bar"><p><strong>{{ page.data.total }}</strong> 个发行<span v-if="appliedQuery"> · “{{ appliedQuery }}”</span><span class="muted"> · 同一扩展可有多个版本</span></p><small :class="{ warning: page.freshness === 'cached' }">{{ freshness(page) }} · {{ formatTime(page.checkedAt) }}</small></div>
+      <div v-if="page" class="results-bar"><p><strong>{{ page.data.total }}</strong> 个扩展<span v-if="appliedQuery"> · “{{ appliedQuery }}”</span><span v-if="filterSummary"> · {{ filterSummary }}</span><span class="muted"> · 每个扩展显示一个版本</span></p><small :class="{ warning: page.freshness === 'cached' }">{{ freshness(page) }} · {{ formatTime(page.checkedAt) }}</small></div>
     </template>
     <template v-else><a class="back" href="/">← 返回目录</a><div class="detail-top"><p class="eyebrow">{{ identity.namespace }} / {{ identity.id }}</p><button :disabled="busy" @click="load">重新确认</button></div></template>
     <p v-if="sourceError" class="banner warning" role="status">{{ sourceError }}</p>
@@ -146,13 +171,16 @@ onUnmounted(() => { generation++; clearPrepared(); window.removeEventListener('p
     <template v-if="page && !identity">
       <p v-if="page.freshness === 'cached'" class="banner warning">服务暂时不可用，显示本次会话中相同查询的缓存。详情下载需要重新连接确认。</p>
       <div v-if="page.data.items.length" class="catalog-grid">
-        <a v-for="release in page.data.items" :key="release.release_id" class="package-card" :href="detailUrl(release)">
-          <div class="card-top"><span class="type-badge">{{ typeNames[release.type] }}</span><span v-if="release.withdrawn" class="state withdrawn">已撤回</span><span v-else class="state" :class="{ available: cardState(release) === '可下载' }">{{ cardState(release) }}</span></div>
-          <h2>{{ release.name }}</h2><p class="package-id">{{ release.namespace }}/{{ release.package_id }}</p><p class="description">{{ release.description || '暂无说明' }}</p>
-          <div class="card-footer"><strong>{{ release.version }}</strong><span>{{ release.license }}</span><span class="view">查看详情 →</span></div>
+        <a v-for="group in page.data.items" :key="`${group.namespace}/${group.package_id}`" class="package-card" :href="detailUrl(group.release)">
+          <div class="card-top"><span class="type-badge">{{ typeNames[group.release.type] }}</span><span v-if="group.release.withdrawn" class="state withdrawn">已撤回</span><span v-else class="state" :class="{ available: cardState(group) === '可下载' }">{{ cardState(group) }}</span></div>
+          <h2>{{ group.release.name }}</h2><p class="package-id">{{ group.namespace }}/{{ group.package_id }}</p><p class="description">{{ group.release.description || '暂无说明' }}</p>
+          <p class="version-summary">{{ group.version_count }} 个版本 · {{ group.matching_version_count }} 个符合筛选</p>
+          <p v-if="group.selection === 'earlier_available'" class="version-summary warning">已选择较早可用版本 {{ group.release.version }} · 最新发布 {{ group.latest_version }}</p>
+          <p v-else-if="group.selection === 'unavailable'" class="version-summary warning">符合筛选的发行均不可用，打开详情核对状态。</p>
+          <div class="card-footer"><strong>{{ group.release.version }}</strong><span>{{ group.release.license }}</span><span class="view">查看详情 →</span></div>
         </a>
       </div>
-      <div v-else class="empty"><h2>没有匹配的发行</h2><p>试试其他关键词或扩展类型。</p></div>
+      <div v-else class="empty"><h2>没有匹配的扩展</h2><p>试试其他关键词、扩展类型或兼容条件。</p></div>
       <nav class="pagination" aria-label="目录分页"><button :disabled="busy || page.data.offset === 0" @click="search(Math.max(0, page.data.offset - page.data.limit))">上一页</button><span>{{ page.data.total ? page.data.offset + 1 : 0 }}–{{ page.data.offset + page.data.items.length }} / {{ page.data.total }}</span><button :disabled="busy || page.data.offset + page.data.limit >= page.data.total" @click="search(page.data.offset + page.data.limit)">下一页</button></nav>
     </template>
     <section v-if="selected && identity" class="detail-grid">

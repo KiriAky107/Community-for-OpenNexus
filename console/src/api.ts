@@ -1,4 +1,4 @@
-import { parsePage, parseRelease, parseSources } from './types.ts'
+import { parseGroupPage, parsePage, parseRelease, parseSources } from './types.ts'
 import type { PackageType, ReadResult, Release, Sources } from './types.ts'
 
 export class CatalogError extends Error {
@@ -32,6 +32,13 @@ export function catalogUrl(q: string, type: PackageType | '', offset: number): s
   const params = new URLSearchParams({ q, offset: String(offset), limit: '18' })
   if (type) params.set('type', type)
   return `/catalog/v1/packages?${params}`
+}
+export interface Compatibility { app_version: string; platform: string; architecture: string }
+export function groupsUrl(q: string, type: PackageType | '', offset: number, filters: Compatibility): string {
+  const params = new URLSearchParams({ q, offset: String(offset), limit: '18' })
+  if (type) params.set('type', type)
+  for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value)
+  return `/catalog/v1/package-groups?${params}`
 }
 export function versionsUrl(namespace: string, id: string, offset = 0, version = ''): string {
   const params = new URLSearchParams({ offset: String(offset), limit: '20' })
@@ -85,6 +92,7 @@ export class CatalogClient {
     while (this.cache.size > 16 || Array.from(this.cache.values()).reduce((sum, item) => sum + item.bytes, 0) > 16 * 1024 * 1024) this.cache.delete(this.cache.keys().next().value!)
   }
   page(url: string) { return this.request(url, parsePage) }
+  groups(url: string) { return this.request(url, parseGroupPage) }
   sources() { return this.request('/catalog/v1/sources', parseSources, { cache: false, fallback: false }) }
   release(id: string, freshOnly = false) { return this.request(`/catalog/v1/releases/${encodeURIComponent(id)}`, parseRelease, { cache: !freshOnly, fallback: !freshOnly }) }
   async download(reviewed: Release, reviewedKey: string): Promise<Blob> {
@@ -111,6 +119,7 @@ export class CatalogClient {
 export function message(error: unknown): string {
   const code = error instanceof Error ? error.message : ''
   const messages: Record<string, string> = {
+    HTTP_422: '请核对筛选条件，OpenNexus 版本须为完整版本号，例如 0.6.0-beta3。',
     HTTP_404: '没有找到这个发行，请检查链接或重新选择版本。', HTTP_410: '发行已撤回或签名公钥已撤销，请刷新状态。',
     INVALID_RESPONSE: '目录返回的数据格式不正确。', RESPONSE_TOO_LARGE: '返回内容超过读取限制。',
     METADATA_CHANGED: '元数据或公钥已变化，请刷新并重新确认。', ARCHIVE_SIZE_MISMATCH: '归档大小与发行记录不符，已取消下载。',
