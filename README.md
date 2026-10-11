@@ -60,6 +60,8 @@ Search the website by name or description, choose a package type, and open a rel
 
 In OpenNexus, compare installed and available versions before installation. The desktop verifies the package's cryptographic signature and asks for installation approval; the website's hash check does not grant execution permissions.
 
+Choose **Language** in the public catalog or workbench header to switch between Chinese and English. The browser stores only this language preference; tokens and session proofs remain outside browser storage. Menus, feedback, confirmations and dates follow the selected language. Package descriptions, changelogs, file text, review reasons and original receipts retain their original text. Switching language keeps selected files, filters and frozen operation content and IDs.
+
 ### 2. Publish and review a signed version
 
 Prepare the manifest and ZIP, sign canonical release metadata locally, and run `check-package`. Submit with the author's token, then use a separate moderator identity to inspect and decide the submission. See [Administration](#administration) for the current CLI commands.

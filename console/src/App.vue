@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import { formatDate, t } from './locale.ts'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { availability, CatalogClient, detailUrl, groupsUrl, message, versionsUrl } from './api.ts'
 import type { Compatibility } from './api.ts'
 import { packageTypes, typeNames } from './types.ts'
 import type { GroupPage, PackageGroup, PackageType, Page, ReadResult, Release, Sources } from './types.ts'
+import LanguageSelector from './LanguageSelector.vue'
 import logo from './assets/opennexus-logo.svg'
 
 const client = new CatalogClient()
@@ -28,9 +30,9 @@ const identity = computed(() => {
 })
 const reason = computed(() => selected.value ? availability(selected.value.data, sources.value, selected.value.freshness !== 'cached') : '尚未选择发行')
 const key = computed(() => sources.value?.keys.find(item => item.key_id === selected.value?.data.key_id && item.namespace === selected.value?.data.namespace))
-const sourceName = computed(() => sources.value?.source_id || '来源尚未确认')
+const sourceName = computed(() => sources.value?.source_id || t('来源尚未确认'))
 const busy = computed(() => loading.value || downloading.value)
-const formatTime = (time: number) => new Date(time).toLocaleString('zh-CN', { hour12: false })
+const formatTime = (time: number) => formatDate(time)
 const size = (bytes: number) => bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KiB`
 const freshness = (result: ReadResult<unknown>) => result.freshness === 'cached' ? '离线缓存' : result.freshness === 'revalidated' ? '已重新确认' : '实时读取'
 function cardState(group: PackageGroup): string {
@@ -144,58 +146,59 @@ onUnmounted(() => { generation++; clearPrepared(); window.removeEventListener('p
 <template>
   <header class="topbar">
     <a class="brand" href="/"><img :src="logo" alt="OpenNexus" /><span><strong>OpenNexus</strong><small>Community</small></span></a>
+    <LanguageSelector/>
     <div class="source-pill"><i :class="{ confirmed: sources }"></i>{{ sourceName }}</div>
-    <a class="wb-catalog-link" href="/workbench">作者与审核</a>
-    <a class="docs-link" href="https://github.com/KiriAky107/Community-for-OpenNexus#quick-start" target="_blank" rel="noreferrer">部署与使用 ↗</a>
+    <a class="wb-catalog-link" href="/workbench">{{ t('作者与审核') }}</a>
+    <a class="docs-link" href="https://github.com/KiriAky107/Community-for-OpenNexus#quick-start" target="_blank" rel="noreferrer">{{ t('部署与使用 ↗') }}</a>
   </header>
   <main>
     <template v-if="!identity">
-      <section class="intro"><p class="eyebrow">OPENNEXUS / EXTENSIONS</p><h1>找到适合你的<span>知识工作流。</span></h1><p>浏览主题、技能与工具，先了解许可、兼容范围和权限，再把扩展带入你的工作区。</p></section>
+      <section class="intro"><p class="eyebrow">OPENNEXUS / EXTENSIONS</p><h1>{{ t('找到适合你的') }}<span>{{ t('知识工作流。') }}</span></h1><p>{{ t('浏览主题、技能与工具，先了解许可、兼容范围和权限，再把扩展带入你的工作区。') }}</p></section>
       <form class="search" @submit.prevent="search()">
-        <label class="search-input"><span>搜索目录</span><input v-model="query" aria-label="搜索目录" maxlength="120" placeholder="名称或描述，例如：笔记、研究…" :disabled="busy" /></label>
-        <label><span>类型</span><select v-model="kind" aria-label="扩展类型" :disabled="busy"><option value="">全部类型</option><option v-for="type in packageTypes" :key="type" :value="type">{{ typeNames[type] }}</option></select></label>
-        <label class="compat-filter"><span>OpenNexus 版本</span><input v-model="filters.app_version" aria-label="OpenNexus 版本" maxlength="120" placeholder="例如 0.6.0-beta3" :disabled="busy" /></label>
-        <label class="compat-filter"><span>平台</span><input v-model="filters.platform" aria-label="平台" maxlength="80" list="platforms" placeholder="全部平台" :disabled="busy" /></label>
-        <label class="compat-filter"><span>架构</span><input v-model="filters.architecture" aria-label="架构" maxlength="80" list="architectures" placeholder="全部架构" :disabled="busy" /></label>
+        <label class="search-input"><span>{{ t('搜索目录') }}</span><input v-model="query" :aria-label="t('搜索目录')" maxlength="120" :placeholder="t('名称或描述，例如：笔记、研究…')" :disabled="busy" /></label>
+        <label><span>{{ t('类型') }}</span><select v-model="kind" :aria-label="t('扩展类型')" :disabled="busy"><option value="">{{ t('全部类型') }}</option><option v-for="type in packageTypes" :key="type" :value="type">{{ t(typeNames[type]) }}</option></select></label>
+        <label class="compat-filter"><span>{{ t('OpenNexus 版本') }}</span><input v-model="filters.app_version" :aria-label="t('OpenNexus 版本')" maxlength="120" :placeholder="t('例如 0.6.0-beta3')" :disabled="busy" /></label>
+        <label class="compat-filter"><span>{{ t('平台') }}</span><input v-model="filters.platform" :aria-label="t('平台')" maxlength="80" list="platforms" :placeholder="t('全部平台')" :disabled="busy" /></label>
+        <label class="compat-filter"><span>{{ t('架构') }}</span><input v-model="filters.architecture" :aria-label="t('架构')" maxlength="80" list="architectures" :placeholder="t('全部架构')" :disabled="busy" /></label>
         <datalist id="platforms"><option value="windows"/><option value="linux"/><option value="macos"/></datalist>
         <datalist id="architectures"><option value="x86_64"/><option value="aarch64"/></datalist>
-        <div class="search-actions"><button class="primary" type="submit" :disabled="busy">搜索</button><button type="button" :disabled="busy" @click="load">刷新</button></div>
+        <div class="search-actions"><button class="primary" type="submit" :disabled="busy">{{ t('搜索') }}</button><button type="button" :disabled="busy" @click="load">{{ t('刷新') }}</button></div>
       </form>
-      <div v-if="page" class="results-bar"><p><strong>{{ page.data.total }}</strong> 个扩展<span v-if="appliedQuery"> · “{{ appliedQuery }}”</span><span v-if="filterSummary"> · {{ filterSummary }}</span><span class="muted"> · 每个扩展显示一个版本</span></p><small :class="{ warning: page.freshness === 'cached' }">{{ freshness(page) }} · {{ formatTime(page.checkedAt) }}</small></div>
+      <div v-if="page" class="results-bar"><p><strong>{{ t('扩展数量', { count: page.data.total }) }}</strong><span v-if="appliedQuery"> · “{{ appliedQuery }}”</span><span v-if="filterSummary"> · {{ filterSummary }}</span><span class="muted"> {{ t('· 每个扩展显示一个版本') }}</span></p><small :class="{ warning: page.freshness === 'cached' }">{{ t(freshness(page)) }} · {{ formatTime(page.checkedAt) }}</small></div>
     </template>
-    <template v-else><a class="back" href="/">← 返回目录</a><div class="detail-top"><p class="eyebrow">{{ identity.namespace }} / {{ identity.id }}</p><button :disabled="busy" @click="load">重新确认</button></div></template>
-    <p v-if="sourceError" class="banner warning" role="status">{{ sourceError }}</p>
-    <p v-if="error" class="banner error" role="alert">{{ error }}<button :disabled="busy" @click="load">重试</button></p>
-    <p v-if="notice" class="banner success" role="status">{{ notice }}</p>
-    <p v-if="loading" class="loading" role="status">正在读取目录与来源…</p>
+    <template v-else><a class="back" href="/">{{ t('← 返回目录') }}</a><div class="detail-top"><p class="eyebrow">{{ identity.namespace }} / {{ identity.id }}</p><button :disabled="busy" @click="load">{{ t('重新确认') }}</button></div></template>
+    <p v-if="sourceError" class="banner warning" role="status">{{ t(sourceError) }}</p>
+    <p v-if="error" class="banner error" role="alert">{{ t(error) }}<button :disabled="busy" @click="load">{{ t('重试') }}</button></p>
+    <p v-if="notice" class="banner success" role="status">{{ t(notice) }}</p>
+    <p v-if="loading" class="loading" role="status">{{ t('正在读取目录与来源…') }}</p>
     <template v-if="page && !identity">
-      <p v-if="page.freshness === 'cached'" class="banner warning">服务暂时不可用，显示本次会话中相同查询的缓存。详情下载需要重新连接确认。</p>
+      <p v-if="page.freshness === 'cached'" class="banner warning">{{ t('服务暂时不可用，显示本次会话中相同查询的缓存。详情下载需要重新连接确认。') }}</p>
       <div v-if="page.data.items.length" class="catalog-grid">
         <a v-for="group in page.data.items" :key="`${group.namespace}/${group.package_id}`" class="package-card" :href="detailUrl(group.release)">
-          <div class="card-top"><span class="type-badge">{{ typeNames[group.release.type] }}</span><span v-if="group.release.withdrawn" class="state withdrawn">已撤回</span><span v-else class="state" :class="{ available: cardState(group) === '可下载' }">{{ cardState(group) }}</span></div>
-          <h2>{{ group.release.name }}</h2><p class="package-id">{{ group.namespace }}/{{ group.package_id }}</p><p class="description">{{ group.release.description || '暂无说明' }}</p>
-          <p class="version-summary">{{ group.version_count }} 个版本 · {{ group.matching_version_count }} 个符合筛选</p>
-          <p v-if="group.selection === 'earlier_available'" class="version-summary warning">已选择较早可用版本 {{ group.release.version }} · 最新发布 {{ group.latest_version }}</p>
-          <p v-else-if="group.selection === 'unavailable'" class="version-summary warning">符合筛选的发行均不可用，打开详情核对状态。</p>
-          <div class="card-footer"><strong>{{ group.release.version }}</strong><span>{{ group.release.license }}</span><span class="view">查看详情 →</span></div>
+          <div class="card-top"><span class="type-badge">{{ t(typeNames[group.release.type]) }}</span><span v-if="group.release.withdrawn" class="state withdrawn">{{ t('已撤回') }}</span><span v-else class="state" :class="{ available: cardState(group) === '可下载' }">{{ t(cardState(group)) }}</span></div>
+          <h2>{{ group.release.name }}</h2><p class="package-id">{{ group.namespace }}/{{ group.package_id }}</p><p class="description">{{ group.release.description || t('暂无说明') }}</p>
+          <p class="version-summary">{{ t('版本筛选数量', { total: group.version_count, matching: group.matching_version_count }) }}</p>
+          <p v-if="group.selection === 'earlier_available'" class="version-summary warning">{{ t('已选择较早可用版本') }} {{ group.release.version }} {{ t('· 最新发布') }} {{ group.latest_version }}</p>
+          <p v-else-if="group.selection === 'unavailable'" class="version-summary warning">{{ t('符合筛选的发行均不可用，打开详情核对状态。') }}</p>
+          <div class="card-footer"><strong>{{ group.release.version }}</strong><span>{{ group.release.license }}</span><span class="view">{{ t('查看详情 →') }}</span></div>
         </a>
       </div>
-      <div v-else class="empty"><h2>没有匹配的扩展</h2><p>试试其他关键词、扩展类型或兼容条件。</p></div>
-      <nav class="pagination" aria-label="目录分页"><button :disabled="busy || page.data.offset === 0" @click="search(Math.max(0, page.data.offset - page.data.limit))">上一页</button><span>{{ page.data.total ? page.data.offset + 1 : 0 }}–{{ page.data.offset + page.data.items.length }} / {{ page.data.total }}</span><button :disabled="busy || page.data.offset + page.data.limit >= page.data.total" @click="search(page.data.offset + page.data.limit)">下一页</button></nav>
+      <div v-else class="empty"><h2>{{ t('没有匹配的扩展') }}</h2><p>{{ t('试试其他关键词、扩展类型或兼容条件。') }}</p></div>
+      <nav class="pagination" :aria-label="t('目录分页')"><button :disabled="busy || page.data.offset === 0" @click="search(Math.max(0, page.data.offset - page.data.limit))">{{ t('上一页') }}</button><span>{{ page.data.total ? page.data.offset + 1 : 0 }}–{{ page.data.offset + page.data.items.length }} / {{ page.data.total }}</span><button :disabled="busy || page.data.offset + page.data.limit >= page.data.total" @click="search(page.data.offset + page.data.limit)">{{ t('下一页') }}</button></nav>
     </template>
     <section v-if="selected && identity" class="detail-grid">
       <article class="detail-body">
-        <div class="detail-heading"><span class="type-badge">{{ typeNames[selected.data.type] }}</span><h1>{{ selected.data.name }}</h1><p>{{ selected.data.version }} · {{ selected.data.author_id }} · {{ selected.data.license }}</p></div>
-        <p class="prose">{{ selected.data.description || '暂无说明' }}</p>
-        <section class="detail-section"><h2>兼容与权限</h2><dl class="facts"><dt>OpenNexus</dt><dd>≥ {{ selected.data.min_app_version }}<template v-if="selected.data.max_app_version">，≤ {{ selected.data.max_app_version }}</template></dd><dt>平台 / 架构</dt><dd>{{ selected.data.platforms.join('、') || '未声明' }} / {{ selected.data.architectures.join('、') || '未声明' }}</dd><dt>请求权限</dt><dd><ul v-if="selected.data.permissions.length"><li v-for="permission in selected.data.permissions" :key="permission"><code>{{ permission }}</code></li></ul><span v-else>未声明权限</span></dd><dt>依赖</dt><dd><ul v-if="Object.keys(selected.data.dependencies).length"><li v-for="(constraint, name) in selected.data.dependencies" :key="name"><code>{{ name }} {{ constraint }}</code></li></ul><span v-else>无声明依赖</span></dd></dl></section>
-        <section class="detail-section"><h2>更新说明</h2><pre class="changelog">{{ selected.data.changelog || '暂无更新说明' }}</pre></section>
-        <section class="detail-section"><h2>发行记录</h2><dl class="facts"><dt>发布于</dt><dd>{{ selected.data.published_at }}</dd><dt>SHA-256</dt><dd><code class="break">{{ selected.data.sha256 }}</code></dd><dt>签名</dt><dd>Ed25519 · {{ selected.data.key_id }}<details><summary>查看签名与公钥</summary><p>签名 <code class="break">{{ selected.data.signature }}</code></p><p>公钥 <code class="break">{{ key?.public_key || '当前来源未提供' }}</code></p><p class="muted">归档下载核对大小与哈希；密码学签名验证由 OpenNexus 安装流程完成。</p></details></dd></dl></section>
+        <div class="detail-heading"><span class="type-badge">{{ t(typeNames[selected.data.type]) }}</span><h1>{{ selected.data.name }}</h1><p>{{ selected.data.version }} · {{ selected.data.author_id }} · {{ selected.data.license }}</p></div>
+        <p class="prose">{{ selected.data.description || t('暂无说明') }}</p>
+        <section class="detail-section"><h2>{{ t('兼容与权限') }}</h2><dl class="facts"><dt>OpenNexus</dt><dd>≥ {{ selected.data.min_app_version }}<template v-if="selected.data.max_app_version">，≤ {{ selected.data.max_app_version }}</template></dd><dt>{{ t('平台 / 架构') }}</dt><dd>{{ selected.data.platforms.join('、') || t('未声明') }} / {{ selected.data.architectures.join('、') || t('未声明') }}</dd><dt>{{ t('请求权限') }}</dt><dd><ul v-if="selected.data.permissions.length"><li v-for="permission in selected.data.permissions" :key="permission"><code>{{ permission }}</code></li></ul><span v-else>{{ t('未声明权限') }}</span></dd><dt>{{ t('依赖') }}</dt><dd><ul v-if="Object.keys(selected.data.dependencies).length"><li v-for="(constraint, name) in selected.data.dependencies" :key="name"><code>{{ name }} {{ constraint }}</code></li></ul><span v-else>{{ t('无声明依赖') }}</span></dd></dl></section>
+        <section class="detail-section"><h2>{{ t('更新说明') }}</h2><pre class="changelog">{{ selected.data.changelog || t('暂无更新说明') }}</pre></section>
+        <section class="detail-section"><h2>{{ t('发行记录') }}</h2><dl class="facts"><dt>{{ t('发布于') }}</dt><dd>{{ formatDate(selected.data.published_at) }}</dd><dt>SHA-256</dt><dd><code class="break">{{ selected.data.sha256 }}</code></dd><dt>{{ t('签名') }}</dt><dd>Ed25519 · {{ selected.data.key_id }}<details><summary>{{ t('查看签名与公钥') }}</summary><p>{{ t('签名') }} <code class="break">{{ selected.data.signature }}</code></p><p>{{ t('公钥') }} <code class="break">{{ key?.public_key || t('当前来源未提供') }}</code></p><p class="muted">{{ t('归档下载核对大小与哈希；密码学签名验证由 OpenNexus 安装流程完成。') }}</p></details></dd></dl></section>
       </article>
       <aside class="detail-aside">
-        <section class="download-card"><p class="eyebrow">{{ sourceName }}</p><h2>{{ selected.data.version }}</h2><p :class="{ warning: reason, available: !reason }">{{ reason || '发行与公钥状态可用' }}</p><button class="primary" :disabled="busy || !!reason" @click="download">{{ downloading ? '正在校验归档…' : `下载归档 · ${size(selected.data.size)}` }}</button><a v-if="prepared" class="save-archive" :href="prepared.url" :download="prepared.name">保存已校验 ZIP ↓</a><small>{{ freshness(selected) }} · {{ formatTime(selected.checkedAt) }}</small><p class="muted">在桌面端安装前，确认兼容性、签名和所需权限。</p></section>
-        <section v-if="versions" class="version-card"><div class="section-heading"><h2>版本记录</h2><small>{{ versions.data.total }} 个发行</small></div><button v-for="release in versions.data.items" :key="release.release_id" class="version" :class="{ chosen: release.release_id === selected.data.release_id }" :disabled="busy" @click="selectVersion(release)"><span>{{ release.version }}</span><small>{{ release.withdrawn ? '已撤回' : '查看' }}</small></button><nav class="pagination compact" aria-label="版本分页"><button :disabled="busy || versionOffset === 0" @click="changeVersions(Math.max(0, versionOffset - 20))">上一页</button><button :disabled="busy || versionOffset + 20 >= versions.data.total" @click="changeVersions(versionOffset + 20)">下一页</button></nav></section>
+        <section class="download-card"><p class="eyebrow">{{ sourceName }}</p><h2>{{ selected.data.version }}</h2><p :class="{ warning: reason, available: !reason }">{{ t(reason || '发行与公钥状态可用') }}</p><button class="primary" :disabled="busy || !!reason" @click="download">{{ downloading ? t('正在校验归档…') : t('下载归档', { size: size(selected.data.size) }) }}</button><a v-if="prepared" class="save-archive" :href="prepared.url" :download="prepared.name">{{ t('保存已校验 ZIP ↓') }}</a><small>{{ t(freshness(selected)) }} · {{ formatTime(selected.checkedAt) }}</small><p class="muted">{{ t('在桌面端安装前，确认兼容性、签名和所需权限。') }}</p></section>
+        <section v-if="versions" class="version-card"><div class="section-heading"><h2>{{ t('版本记录') }}</h2><small>{{ t('发行数量', { count: versions.data.total }) }}</small></div><button v-for="release in versions.data.items" :key="release.release_id" class="version" :class="{ chosen: release.release_id === selected.data.release_id }" :disabled="busy" @click="selectVersion(release)"><span>{{ release.version }}</span><small>{{ release.withdrawn ? t('已撤回') : t('查看') }}</small></button><nav class="pagination compact" :aria-label="t('版本分页')"><button :disabled="busy || versionOffset === 0" @click="changeVersions(Math.max(0, versionOffset - 20))">{{ t('上一页') }}</button><button :disabled="busy || versionOffset + 20 >= versions.data.total" @click="changeVersions(versionOffset + 20)">{{ t('下一页') }}</button></nav></section>
       </aside>
     </section>
   </main>
-  <footer><span>OpenNexus Community</span><span>公开目录 · 包元数据按原文展示</span><a href="https://github.com/KiriAky107/Community-for-OpenNexus" target="_blank" rel="noreferrer">GitHub ↗</a></footer>
+  <footer><span>OpenNexus Community</span><span>{{ t('公开目录 · 包元数据按原文展示') }}</span><a href="https://github.com/KiriAky107/Community-for-OpenNexus" target="_blank" rel="noreferrer">GitHub ↗</a></footer>
 </template>
