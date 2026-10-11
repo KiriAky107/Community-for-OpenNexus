@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .package import Release
-from .catalog_query import configure_connection, ensure_indexes, page, public
+from .catalog_query import configure_connection, ensure_indexes, group_page, page, public, valid_version
 from .operations import readiness
 from .web import mount_web
 from .sessions import BrowserSessions, SessionError, SESSION_SCHEMA
@@ -255,6 +255,22 @@ def create_app(registry: Registry, source_id="self-hosted", allowed_origins=(), 
         with registry.connect(write=False) as conn:
             keys = [{"key_id": x["id"], "namespace": x["namespace"], "public_key": base64.b64encode(x["public_key"]).decode(), "revoked": bool(x["revoked"])} for x in conn.execute("SELECT * FROM keys")]
         return JSONResponse({"schema_version": 1, "source_id": source_id, "keys": keys}, headers={'Cache-Control': 'no-store'})
+
+    @app.get('/catalog/v1/package-groups')
+    def package_groups(q: str = Query(default='', max_length=120), type: Literal['theme', 'skill', 'plugin', 'mcp', 'persona', 'template', 'model'] | None = None,
+                       app_version: str | None = Query(default=None, min_length=1, max_length=120),
+                       platform: str | None = Query(default=None, min_length=1, max_length=80),
+                       architecture: str | None = Query(default=None, min_length=1, max_length=80),
+                       offset: int = Query(default=0, ge=0, le=2147483647), limit: int = Query(default=30, ge=1, le=100),
+                       if_none_match: str | None = Header(default=None)):
+        if app_version is not None and not valid_version(app_version):
+            raise CatalogError(422, 'INVALID_APP_VERSION')
+        with registry.connect(write=False) as conn:
+            result = group_page(conn, query=q, kind=type, app_version=app_version, platform=platform, architecture=architecture, offset=offset, limit=limit)
+        etag = '"' + hashlib.sha256(json.dumps([source_id,q,type,app_version,platform,architecture,result], sort_keys=True, ensure_ascii=False).encode()).hexdigest() + '"'
+        if etag == if_none_match: return Response(status_code=304, headers={'ETag': etag, 'Cache-Control': 'no-cache'})
+        # Key revocation changes card selection, requiring cache revalidation.
+        return JSONResponse(result, headers={'ETag': etag, 'Cache-Control': 'no-cache'})
 
     @app.get("/catalog/v1/packages")
     def packages(q: str = Query(default="", max_length=120), type: Literal["theme", "skill", "plugin", "mcp", "persona", "template", "model"] | None = None,
