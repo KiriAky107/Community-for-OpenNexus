@@ -1,8 +1,9 @@
 import { parseMetadata } from './types.ts'
-import type { Metadata } from './types.ts'
+import type { Metadata, PackageType } from './types.ts'
 
 export interface Session { schema_version: 1; session_id: string; principal_id: string; role: 'author' | 'moderator'; namespace: string | null; expires_at: number; csrf: string }
 export type State = 'pending' | 'published' | 'rejected' | 'withdrawn'
+export interface QueueFilters { q: string; namespace: string; type: PackageType | ''; state: State | '' }
 export interface Decision { id: number; actor: string; action: string; reason: string; timestamp: number }
 export interface Item { submission_id: string; state: State; release: Metadata; decisions?: Decision[] }
 export interface Page { total: number; offset: number; limit: number; items: Item[] }

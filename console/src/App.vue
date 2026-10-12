@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import OriginalText from './OriginalText.vue'
 import { formatDate, t } from './locale.ts'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { availability, CatalogClient, detailUrl, groupsUrl, message, versionsUrl } from './api.ts'
@@ -189,9 +190,9 @@ onUnmounted(() => { generation++; clearPrepared(); window.removeEventListener('p
     <section v-if="selected && identity" class="detail-grid">
       <article class="detail-body">
         <div class="detail-heading"><span class="type-badge">{{ t(typeNames[selected.data.type]) }}</span><h1>{{ selected.data.name }}</h1><p>{{ selected.data.version }} · {{ selected.data.author_id }} · {{ selected.data.license }}</p></div>
-        <p class="prose">{{ selected.data.description || t('暂无说明') }}</p>
+        <OriginalText :text="selected.data.description || t('暂无说明')" :label="t('包说明')" prose />
         <section class="detail-section"><h2>{{ t('兼容与权限') }}</h2><dl class="facts"><dt>OpenNexus</dt><dd>≥ {{ selected.data.min_app_version }}<template v-if="selected.data.max_app_version">，≤ {{ selected.data.max_app_version }}</template></dd><dt>{{ t('平台 / 架构') }}</dt><dd>{{ selected.data.platforms.join('、') || t('未声明') }} / {{ selected.data.architectures.join('、') || t('未声明') }}</dd><dt>{{ t('请求权限') }}</dt><dd><ul v-if="selected.data.permissions.length"><li v-for="permission in selected.data.permissions" :key="permission"><code>{{ permission }}</code></li></ul><span v-else>{{ t('未声明权限') }}</span></dd><dt>{{ t('依赖') }}</dt><dd><ul v-if="Object.keys(selected.data.dependencies).length"><li v-for="(constraint, name) in selected.data.dependencies" :key="name"><code>{{ name }} {{ constraint }}</code></li></ul><span v-else>{{ t('无声明依赖') }}</span></dd></dl></section>
-        <section class="detail-section"><h2>{{ t('更新说明') }}</h2><pre class="changelog">{{ selected.data.changelog || t('暂无更新说明') }}</pre></section>
+        <section class="detail-section"><h2>{{ t('更新说明') }}</h2><OriginalText :text="selected.data.changelog || t('暂无更新说明')" :label="t('更新说明')" /></section>
         <section class="detail-section"><h2>{{ t('发行记录') }}</h2><dl class="facts"><dt>{{ t('发布于') }}</dt><dd>{{ formatDate(selected.data.published_at) }}</dd><dt>SHA-256</dt><dd><code class="break">{{ selected.data.sha256 }}</code></dd><dt>{{ t('签名') }}</dt><dd>Ed25519 · {{ selected.data.key_id }}<details><summary>{{ t('查看签名与公钥') }}</summary><p>{{ t('签名') }} <code class="break">{{ selected.data.signature }}</code></p><p>{{ t('公钥') }} <code class="break">{{ key?.public_key || t('当前来源未提供') }}</code></p><p class="muted">{{ t('归档下载核对大小与哈希；密码学签名验证由 OpenNexus 安装流程完成。') }}</p></details></dd></dl></section>
       </article>
       <aside class="detail-aside">

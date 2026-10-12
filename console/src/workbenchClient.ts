@@ -71,7 +71,16 @@ export class WorkbenchClient {
     if (value.state !== 'revoked' || value.session_id !== id) throw new CatalogError('INVALID_RESPONSE')
     if (this.current?.session_id === id) this.clear()
   }
-  page(moderation = false, offset = 0) { return this.request(`/catalog/v1/${moderation ? 'moderation/reviews' : 'publish/submissions'}?offset=${offset}&limit=20`, moderation ? parseReviews : parsePage) }
+  async page(moderation = false, offset = 0, input: import('./workbenchTypes.ts').QueueFilters = { q: '', namespace: '', type: '', state: '' }) {
+    const filters = Object.freeze({ ...input })
+    if (!Number.isSafeInteger(offset) || offset < 0 || offset > 2147483647 || filters.q.length > 120 || filters.namespace.length > 64 || !['', 'theme', 'skill', 'plugin', 'mcp', 'persona', 'template', 'model'].includes(filters.type) || !['', 'pending', 'published', 'rejected', 'withdrawn'].includes(filters.state)) throw new CatalogError('INVALID_REQUEST')
+    const query = new URLSearchParams({ offset: String(offset), limit: '20' })
+    for (const field of ['q', 'namespace', 'type'] as const) if (filters[field]) query.set(field, filters[field])
+    if (!moderation && filters.state) query.set('state', filters.state)
+    const result = await this.request(`/catalog/v1/${moderation ? 'moderation/reviews' : 'publish/submissions'}?${query}`, moderation ? parseReviews : parsePage)
+    if (result.offset !== offset || result.limit !== 20 || result.items.some(item => (filters.namespace && item.release.namespace !== filters.namespace) || (filters.type && item.release.type !== filters.type) || (!moderation && filters.state && item.state !== filters.state))) throw new CatalogError('INVALID_RESPONSE')
+    return result
+  }
   status(id: string) { return this.request(`/catalog/v1/publish/submissions/${encodeURIComponent(id)}`, parseItem) }
   detail(id: string, offset = 0) { return this.request(`/catalog/v1/publish/submissions/${encodeURIComponent(id)}/inspection?offset=${offset}&limit=100`, parseDetail) }
   async textDifference(reviewed: Detail, path: string) {

@@ -97,6 +97,8 @@ With `COMMUNITY_WEB_ORIGIN` configured, open **Author and moderation** at `/work
 
 Moderators use their own session to review pending submissions, compare metadata, permissions and file changes against the previous publication, and approve or reject with a reason. File and difference pages contain at most 100 entries. Manifests display at most 64 KiB and explicitly indicate truncation; **Save verified ZIP** provides the original archive for full inspection. Package text is rendered literally and never executed.
 
+Apply literal text, namespace and package-type filters to a submission queue; submission history also supports a state filter. Authors see only their own submissions. Pagination and refresh retain the applied filters, and a new filter clears the old detail selection. Long descriptions and changelogs show a shortened original preview with **Read complete original**; the expanded text preserves every line and both languages without rendering embedded HTML or Markdown.
+
 ### 3. Handle an update or incident
 
 Publish changed content as a new immutable version, keeping the previous signed metadata and ZIP.

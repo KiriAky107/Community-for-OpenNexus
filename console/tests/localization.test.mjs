@@ -23,7 +23,7 @@ test('UI templates and known client errors have translations; original signed an
     assert.equal(pair.length, 2, key)
     assert.equal(chinese.test(pair[1]), false, key)
   }
-  const files = ['App.vue', 'Workbench.vue', 'PackageInspection.vue', 'AuditPanel.vue', 'SigningKeys.vue', 'TextReview.vue', 'KeyChanges.vue']
+  const files = ['App.vue', 'Workbench.vue', 'PackageInspection.vue', 'AuditPanel.vue', 'SigningKeys.vue', 'TextReview.vue', 'KeyChanges.vue', 'OriginalText.vue']
   for (const name of files) {
     const source = fs.readFileSync(new URL('../src/' + name, import.meta.url), 'utf8')
     const ast = parse(source).descriptor.template.ast

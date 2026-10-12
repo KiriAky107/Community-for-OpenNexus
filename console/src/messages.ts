@@ -1,4 +1,11 @@
 export const messages: Record<string, readonly [string, string]> = {
+  '原文预览已缩短，展开可读取全部内容。': ['原文预览已缩短，展开可读取全部内容。', 'This preview is shortened. Expand it to read the complete original.'],
+  '展开完整原文': ['展开完整原文', 'Read complete original'],
+  '包说明': ['包说明', 'Package description'],
+  '筛选提交': ['筛选提交', 'Filter submissions'],
+  '命名空间筛选': ['命名空间筛选', 'Namespace filter'],
+  '提交状态': ['提交状态', 'Submission state'],
+  '筛选': ['筛选', 'Apply filters'],
   "作者与审核": [
     "作者与审核",
     "Authors & review"

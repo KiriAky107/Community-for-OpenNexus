@@ -6,6 +6,7 @@ import type { Metadata } from './types.ts'
 import type { Inspection, Previous, TextDifference } from './workbenchTypes.ts'
 import TextReview from './TextReview.vue'
 import KeyChanges from './KeyChanges.vue'
+import OriginalText from './OriginalText.vue'
 const props = defineProps<{ release: Metadata; inspection: Inspection; previous?: Previous | null; textReview?: TextDifference | null; busy: boolean; paged?: boolean }>()
 defineEmits<{ page: [offset: number]; text: [path: string] }>()
 const textPanel = ref<HTMLElement>()
@@ -17,7 +18,7 @@ const bytes = (value: number) => value < 1024 ? `${value} B` : `${(value / 1024)
   <div class="wb-inspection">
     <div class="section-heading"><h2>{{ release.name }}</h2><span class="type-badge">{{ t(typeNames[release.type]) }}</span></div>
     <p class="package-id">{{ release.namespace }}/{{ release.package_id }} · {{ release.version }}</p>
-    <p class="prose">{{ release.description }}</p>
+    <OriginalText :text="release.description" :label="t('包说明')" prose />
     <dl class="facts">
       <dt>{{ t('作者与许可') }}</dt><dd>{{ release.author_id }} · {{ release.license }}</dd>
       <dt>{{ t('兼容范围') }}</dt><dd>{{ release.min_app_version }} – {{ release.max_app_version || t('未设上限') }} · {{ release.platforms.join(', ') }} · {{ release.architectures.join(', ') }}</dd>
@@ -27,7 +28,7 @@ const bytes = (value: number) => value < 1024 ? `${value} B` : `${(value / 1024)
       <dt>SHA-256</dt><dd><code>{{ inspection.archive_sha256 }}</code></dd>
       <dt>{{ t('签名') }}</dt><dd :class="inspection.signer_revoked ? 'withdrawn' : 'available'">{{ t('已验证 ·') }} {{ release.key_id }}{{ inspection.signer_revoked ? t(' · 公钥已撤销，不能批准') : '' }}</dd>
     </dl>
-    <section class="detail-section"><h3>{{ t('原始更新说明') }}</h3><pre class="changelog">{{ release.changelog }}</pre></section>
+    <section class="detail-section"><h3>{{ t('原始更新说明') }}</h3><OriginalText :text="release.changelog" :label="t('原始更新说明')" /></section>
     <section class="detail-section"><h3>{{ t('类型清单 ·') }} {{ inspection.manifest }}</h3>
       <p v-if="inspection.manifest_truncated" class="banner warning">{{ t('清单仅展示前 64 KiB，内容已截断。下载原 ZIP 检查完整内容。') }}</p>
       <pre class="changelog wb-manifest">{{ inspection.manifest_text }}</pre>

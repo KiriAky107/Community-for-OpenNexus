@@ -80,6 +80,12 @@ code, .changelog { font-family: ui-monospace, Consolas, "Microsoft YaHei", monos
 details { margin-top: 10px; }
 summary { cursor: pointer; color: var(--accent); }
 .changelog { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.9; background: #f7f8fc; padding: 18px; border-radius: 8px; }
+.original-text .prose { font-family: inherit; margin-top: 14px; }
+.original-text-note { font-size: 12px; margin: 8px 0; }
+.original-text summary { cursor: pointer; overflow-wrap: anywhere; }
+.queue-filters { display: grid; gap: 10px; margin: 16px 0; }
+.queue-filters label { min-width: 0; }
+.queue-filters input, .queue-filters select { width: 100%; min-width: 0; }
 .detail-aside { min-width: 0; }
 .download-card { padding: 22px; }
 .download-card h2 { font-size: 27px; margin: 16px 0; overflow-wrap: anywhere; }
