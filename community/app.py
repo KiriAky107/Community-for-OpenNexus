@@ -23,6 +23,7 @@ from .web import mount_web
 from .sessions import BrowserSessions, SessionError, SESSION_SCHEMA
 from .workbench import details, digest, inspection, receipt, release_digest, text_difference, TextReviewError
 from .management import audit_page as audit_query, key_page, key_state
+from .review_queue import queue_page
 
 
 class CatalogError(Exception):
@@ -336,12 +337,11 @@ def create_app(registry: Registry, source_id="self-hosted", allowed_origins=(), 
             return operation(conn, request, actor, body, 'submit', '/'.join((body.release.namespace, body.release.package_id, body.release.version)), apply)
 
     @app.get("/catalog/v1/moderation/reviews")
-    def pending(request: Request, offset: int = Query(default=0, ge=0, le=2147483647), limit: int = Query(default=30, ge=1, le=100), authorization: str = Header(default="")):
+    def pending(request: Request, offset: int = Query(default=0, ge=0, le=2147483647), limit: int = Query(default=30, ge=1, le=100), authorization: str = Header(default=""),
+                q: str = Query(default='', max_length=120), namespace: str = Query(default='', max_length=64), type: Literal['theme', 'skill', 'plugin', 'mcp', 'persona', 'template', 'model'] | None = None):
         with registry.connect(write=False) as conn:
             principal(conn, request, authorization, "moderator")
-            total = conn.execute("SELECT COUNT(*) FROM submissions WHERE state='pending'").fetchone()[0]
-            rows = conn.execute("SELECT id,metadata FROM submissions WHERE state='pending' ORDER BY id LIMIT ? OFFSET ?", (limit, offset))
-            return {'schema_version': 1, 'total': total, 'offset': offset, 'limit': limit, 'items': [{"submission_id": x["id"], "release": json.loads(x["metadata"])} for x in rows]}
+            return queue_page(conn, pending=True, q=q, namespace=namespace, kind=type, offset=offset, limit=limit)
 
     @app.get('/catalog/v1/publish/submissions/{submission_id}')
     def submission_status(submission_id: str, request: Request, authorization: str = Header(default='')):
@@ -354,17 +354,13 @@ def create_app(registry: Registry, source_id="self-hosted", allowed_origins=(), 
             return {'schema_version': 1, 'submission_id': item['id'], 'state': item['state'], 'release': json.loads(item['metadata']), 'decisions': decisions}
 
     @app.get('/catalog/v1/publish/submissions')
-    def own_submissions(request: Request, package_id: str | None = Query(default=None, max_length=64), version: str | None = Query(default=None, max_length=120), offset: int = Query(default=0, ge=0, le=2147483647), limit: int = Query(default=30, ge=1, le=100), authorization: str = Header(default='')):
+    def own_submissions(request: Request, package_id: str | None = Query(default=None, max_length=64), version: str | None = Query(default=None, max_length=120), offset: int = Query(default=0, ge=0, le=2147483647), limit: int = Query(default=30, ge=1, le=100), authorization: str = Header(default=''),
+                        q: str = Query(default='', max_length=120), namespace: str = Query(default='', max_length=64), type: Literal['theme', 'skill', 'plugin', 'mcp', 'persona', 'template', 'model'] | None = None,
+                        state: Literal['pending', 'published', 'rejected', 'withdrawn'] | None = None):
         with registry.connect(write=False) as conn:
             actor = principal(conn, request, authorization)
-            conditions, values = [], []
-            if actor['role'] != 'moderator': conditions.append('author_id=?'); values.append(actor['id'])
-            if package_id is not None: conditions.append('package_id=?'); values.append(package_id)
-            if version is not None: conditions.append('version=?'); values.append(version)
-            where = ' AND '.join(conditions) or '1'
-            total = conn.execute(f'SELECT COUNT(*) FROM submissions WHERE {where}', values).fetchone()[0]
-            rows = conn.execute(f'SELECT id,metadata,state FROM submissions WHERE {where} ORDER BY id LIMIT ? OFFSET ?', [*values, limit, offset])
-            return {'schema_version': 1, 'total': total, 'offset': offset, 'limit': limit, 'items': [{'submission_id': row['id'], 'state': row['state'], 'release': json.loads(row['metadata'])} for row in rows]}
+            return queue_page(conn, author_id=None if actor['role'] == 'moderator' else actor['id'], q=q, namespace=namespace, kind=type, state=state,
+                              package_id=package_id, version=version, offset=offset, limit=limit)
 
     @app.get('/catalog/v1/moderation/audit')
     def audit_page(request: Request, after: int = Query(default=0, ge=0, le=9223372036854775807), before: int | None = Query(default=None, ge=1, le=9007199254740991), limit: int = Query(default=30, ge=1, le=100),
