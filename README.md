@@ -13,24 +13,24 @@
   </p>
 
   <p>
-    <a href="https://github.com/KiriAky107/Community-for-OpenNexus/releases/tag/v0.7.0"><img src="https://img.shields.io/badge/Version-0.7.0-5865f2?style=flat-square" alt="Version" /></a> <a href="https://github.com/KiriAky107/Community-for-OpenNexus/actions/workflows/ci.yml"><img src="https://github.com/KiriAky107/Community-for-OpenNexus/actions/workflows/ci.yml/badge.svg" alt="CI" /></a> <img src="https://img.shields.io/badge/Python-3.12%2B-3776ab?style=flat-square" alt="Python 3.12+" /> <img src="https://img.shields.io/badge/API-FastAPI-05998b?style=flat-square" alt="FastAPI" /> <img src="https://img.shields.io/badge/Signatures-Ed25519-6366f1?style=flat-square" alt="Ed25519" /> <img src="https://img.shields.io/badge/Metadata-SQLite-003b57?style=flat-square" alt="SQLite" /> <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22c55e?style=flat-square" alt="MIT License" /></a>
+    <a href="https://github.com/KiriAky107/Community-for-OpenNexus/releases/tag/v0.8.0"><img src="https://img.shields.io/badge/Version-0.8.0-5865f2?style=flat-square" alt="Version" /></a> <a href="https://github.com/KiriAky107/Community-for-OpenNexus/actions/workflows/ci.yml"><img src="https://github.com/KiriAky107/Community-for-OpenNexus/actions/workflows/ci.yml/badge.svg" alt="CI" /></a> <img src="https://img.shields.io/badge/Python-3.12%2B-3776ab?style=flat-square" alt="Python 3.12+" /> <img src="https://img.shields.io/badge/API-FastAPI-05998b?style=flat-square" alt="FastAPI" /> <img src="https://img.shields.io/badge/Signatures-Ed25519-6366f1?style=flat-square" alt="Ed25519" /> <img src="https://img.shields.io/badge/Metadata-SQLite-003b57?style=flat-square" alt="SQLite" /> <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22c55e?style=flat-square" alt="MIT License" /></a>
   </p>
 
 </div>
 
 ---
 
-Current release: [v0.7.0](https://github.com/KiriAky107/Community-for-OpenNexus/releases/tag/v0.7.0).
+Current release: [v0.8.0](https://github.com/KiriAky107/Community-for-OpenNexus/releases/tag/v0.8.0).
 
-0.7.0 provides a public catalog at `/` and an author and moderator workbench at `/workbench`. Authors build signed archives locally; reviewers inspect actual files and changes before deciding. Users can try licensed examples and review their installation, updates and application in OpenNexus.
+0.8.0 groups catalog versions, adds bounded text and manifest differences, exposes role-scoped audit and public-key views, and improves review queue reading. The public catalog and workbench now provide explicit English and Chinese interfaces while preserving signed author text exactly.
 
-## What’s New in 0.7.0
+## What’s New in 0.8.0
 
-- **Public web catalog**: Search, filter and paginate packages, share version details and read the original bilingual notes. Downloads recheck release and key state, verify size and SHA-256, and provide an explicit save link.
-- **Author and moderator workbench**: Use same-origin sessions with role checks, expiry, logout and revocation. The token field is cleared before sending; identity and CSRF proof stay in memory, and an expiring HttpOnly cookie carries the session.
-- **Reviewable operations**: Inspect signed metadata, actual files, manifests and previous-version differences before confirming a frozen submission or review. Rejection reasons, reports and withdrawals retain records; unknown writes are queried by their original operation IDs.
-- **Offline author tools and examples**: Create keys and signed ZIPs locally. Source and deployment archives include five MIT-licensed examples covering personas, a multi-file experiment, a local read-only MCP configuration and a pinned model profile, including a persona with a template dependency.
-- **Updates and recovery**: Review desktop candidate updates, target differences and rollback separately. Withdrawn versions and revoked keys block new use while applied user data is preserved. Online backups retain catalog records and original archives; restored browser sessions require a new login.
+- **Grouped catalog**: Browse compatible and earlier versions under each package, retain share links and recheck withdrawal or signing-key state before downloading the original ZIP.
+- **Bounded review differences**: Inspect actual text, important manifest changes, paginated files and differences from the previous version with explicit encoding, binary, size and truncation reasons.
+- **Audit and public keys**: Reviewers can search recent audit entries and page public keys, while authors remain limited to their own namespace. Key registration stays in the server CLI.
+- **English and Chinese UI**: Switch the public catalog, workbench, review, audit, key and difference views without translating signed author text or original moderation records.
+- **Review queue reading**: Apply literal query, namespace, type and state filters, retain pagination and expand complete original descriptions or changelogs without executing HTML or Markdown.
 
 ## Highlights
 

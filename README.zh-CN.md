@@ -13,24 +13,24 @@
   </p>
 
   <p>
-    <a href="https://github.com/KiriAky107/Community-for-OpenNexus/releases/tag/v0.7.0"><img src="https://img.shields.io/badge/Version-0.7.0-5865f2?style=flat-square" alt="版本" /></a> <a href="https://github.com/KiriAky107/Community-for-OpenNexus/actions/workflows/ci.yml"><img src="https://github.com/KiriAky107/Community-for-OpenNexus/actions/workflows/ci.yml/badge.svg" alt="CI" /></a> <img src="https://img.shields.io/badge/Python-3.12%2B-3776ab?style=flat-square" alt="Python 3.12+" /> <img src="https://img.shields.io/badge/API-FastAPI-05998b?style=flat-square" alt="FastAPI" /> <img src="https://img.shields.io/badge/Signatures-Ed25519-6366f1?style=flat-square" alt="Ed25519" /> <img src="https://img.shields.io/badge/Metadata-SQLite-003b57?style=flat-square" alt="SQLite" /> <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22c55e?style=flat-square" alt="MIT License" /></a>
+    <a href="https://github.com/KiriAky107/Community-for-OpenNexus/releases/tag/v0.8.0"><img src="https://img.shields.io/badge/Version-0.8.0-5865f2?style=flat-square" alt="版本" /></a> <a href="https://github.com/KiriAky107/Community-for-OpenNexus/actions/workflows/ci.yml"><img src="https://github.com/KiriAky107/Community-for-OpenNexus/actions/workflows/ci.yml/badge.svg" alt="CI" /></a> <img src="https://img.shields.io/badge/Python-3.12%2B-3776ab?style=flat-square" alt="Python 3.12+" /> <img src="https://img.shields.io/badge/API-FastAPI-05998b?style=flat-square" alt="FastAPI" /> <img src="https://img.shields.io/badge/Signatures-Ed25519-6366f1?style=flat-square" alt="Ed25519" /> <img src="https://img.shields.io/badge/Metadata-SQLite-003b57?style=flat-square" alt="SQLite" /> <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-22c55e?style=flat-square" alt="MIT License" /></a>
   </p>
 
 </div>
 
 ---
 
-当前版本： [v0.7.0](https://github.com/KiriAky107/Community-for-OpenNexus/releases/tag/v0.7.0)。
+当前版本： [v0.8.0](https://github.com/KiriAky107/Community-for-OpenNexus/releases/tag/v0.8.0)。
 
-0.7.0 提供 `/` 公开目录和 `/workbench` 作者与审核工作台。作者在本地构建签名归档，审核员查看实际文件与变化后再决定是否批准。用户可试用有许可的真实示例，在 OpenNexus 中分别审核安装、更新与应用。
+0.8.0 增加聚合版本目录、有界文本与清单差异、按角色隔离的审计和公钥入口，以及更易读取的审核队列。公开目录与工作台提供明确的中英文界面，同时完整保留作者签名原文。
 
-## 0.7.0 更新
+## 0.8.0 更新
 
-- **公开网页目录**：搜索、筛选并分页浏览扩展，分享版本详情、阅读原始双语说明。下载前重新核对发行与密钥状态、大小和 SHA-256，再提供明确的保存链接。
-- **作者与审核工作台**：使用同源会话，校验角色，支持到期、退出和撤销。Token 输入框在发出前清空，身份与 CSRF 证明只保留在内存中，会话使用有期限的 HttpOnly Cookie。
-- **可审核操作**：确认冻结的提交或审核前，查看签名元数据、实际文件、清单和前版差异。拒绝原因、举报与撤回保留记录，未知写入按原操作编号查询。
-- **离线作者工具与示例**：在本地创建密钥与签名 ZIP。源码包与部署包包含五个 MIT 许可示例，覆盖 Persona、多文件实验、本地只读 MCP 配置和固定模型方案，其中一个 Persona 依赖实验模板。
-- **更新与恢复**：分别审核桌面候选更新、目标差异与回滚。撤回版本或撤销密钥阻止新的使用，已应用用户数据保留。在线备份保存目录记录与原始归档，恢复后的网页会话需要重新登录。
+- **聚合目录**：在每个扩展下浏览兼容版本与较早版本，保留分享链接；下载原 ZIP 前重新核对撤回与签名密钥状态。
+- **受限审核差异**：查看实际文本、关键清单变化、分页文件和前版差异，并明确显示编码、二进制、大小与截断原因。
+- **审计与公钥**：审核员可检索近期审计记录并分页查看公钥，作者仍只看到自己的命名空间；公钥登记保留在服务端 CLI。
+- **中英文界面**：公共目录、工作台、审核、审计、公钥和差异界面均可切换语言，不翻译作者签名原文或原审核记录。
+- **审核队列阅读**：应用字面关键词、命名空间、类型和状态筛选，保留分页，并展开完整原说明或更新记录，不执行 HTML 或 Markdown。
 
 ## 核心亮点
 
